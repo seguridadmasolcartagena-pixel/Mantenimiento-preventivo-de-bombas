@@ -377,7 +377,7 @@ function renderDetail(pump) {
           <input class="field" name="area" value="${escapeHtml(pump.area)}" required />
         </label>
         <label class="full">
-          Nombre
+          Tipo de bomba
           <input class="field" name="name" value="${escapeHtml(pump.name)}" required />
         </label>
         <label>
