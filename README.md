@@ -39,7 +39,7 @@ La medida que se guarda como vibracion es:
 - Grupo `OV-Velocity`
 - Columna `RMS(mm/s)`
 
-Tras cada importacion con nuevas medidas, la app genera un Excel historico acumulado con hoja `viewdata` y estructura de bloques por bomba/punto.
+Tras cada importacion con nuevas medidas, la app genera un Excel historico acumulado con hoja `viewdata` y estructura de bloques por bomba/punto. Ese Excel conserva las filas completas del Fluke, mientras que la aplicacion solo usa `OV-Velocity > RMS(mm/s)` para pantalla y graficas.
 
 Si al importar no aparecen bombas, revisa:
 

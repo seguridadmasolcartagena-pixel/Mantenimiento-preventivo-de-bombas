@@ -1,4 +1,5 @@
 const STORAGE_KEY = "gestor-bombas-v3";
+const VIEWDATA_STORAGE_KEY = "gestor-bombas-viewdata-v1";
 const MEASUREMENT_POINTS = ["B-LA", "B-LOA", "M-LA", "M-LOA"];
 const POINT_COLORS = {
   "B-LA": "#0f766e",
@@ -120,6 +121,7 @@ function measurement(date, point, vibration) {
 
 const state = {
   pumps: loadPumps(),
+  viewDataBlocks: loadViewDataBlocks(),
   selectedId: null,
   query: "",
   filter: "Todas",
@@ -167,6 +169,22 @@ function normalizeMeasurement(item) {
 
 function savePumps() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state.pumps));
+}
+
+function loadViewDataBlocks() {
+  const saved = localStorage.getItem(VIEWDATA_STORAGE_KEY);
+  if (!saved) return [];
+
+  try {
+    const parsed = JSON.parse(saved);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveViewDataBlocks() {
+  localStorage.setItem(VIEWDATA_STORAGE_KEY, JSON.stringify(state.viewDataBlocks));
 }
 
 function selectedPump() {
@@ -249,7 +267,7 @@ function render() {
           <div class="toolbar">
             <input id="measureFile" type="file" accept=".csv,.xlsx,.xls,.xlsm" hidden />
             <button class="button secondary" id="importMeasures">Importar Excel/CSV</button>
-            <button class="button secondary" id="downloadHistory">Descargar historico Excel</button>
+            <button class="button secondary" id="downloadHistory">Descargar Excel maestro</button>
             <button class="button" id="addPump">+ Nueva bomba</button>
           </div>
         </section>
@@ -684,16 +702,18 @@ async function importMeasurements(event) {
   if (!file) return;
 
   try {
-    const rows = await readMeasureFile(file);
-    const result = mergeMeasurements(rows);
+    const importData = await readMeasureFile(file);
+    const result = mergeMeasurements(importData.measurements);
+    const viewDataResult = mergeViewDataBlocks(importData.blocks);
     savePumps();
+    saveViewDataBlocks();
     if (!result.measurements) {
       state.importMessage = "No se encontraron medidas nuevas. Revisa que la hoja sea viewdata y que tenga Machine Name, OV-Velocity y RMS(mm/s).";
       render();
       showToast("No se encontraron medidas nuevas.");
       return;
     }
-    state.importMessage = `Importacion correcta: ${result.measurements} medidas Velocity RMS en ${result.pumps} bombas.`;
+    state.importMessage = `Importacion correcta: ${result.measurements} medidas Velocity RMS en ${result.pumps} bombas. Excel historico actualizado con ${viewDataResult.rows} filas completas de ViewData.`;
     render();
     showToast(`${result.measurements} medidas importadas en ${result.pumps} bombas.`);
     downloadHistoryExcel();
@@ -708,7 +728,7 @@ async function importMeasurements(event) {
 
 async function readMeasureFile(file) {
   const extension = file.name.split(".").pop().toLowerCase();
-  if (extension === "csv") return parseCsv(await file.text());
+  if (extension === "csv") return { measurements: parseCsv(await file.text()), blocks: [] };
 
   if (!window.XLSX) {
     throw new Error("No se cargo la libreria Excel. Abre la app con conexion a internet o desde GitHub Pages.");
@@ -720,10 +740,10 @@ async function readMeasureFile(file) {
   const sheet = workbook.Sheets[sheetName];
   if (!sheet) throw new Error("No se pudo abrir la hoja viewdata del Excel.");
   const matrix = sheetToMatrix(sheet);
-  const viewDataRows = parseViewDataSheet(matrix);
-  if (viewDataRows.length) return viewDataRows;
+  const viewData = parseViewDataSheet(matrix);
+  if (viewData.measurements.length) return viewData;
 
-  return window.XLSX.utils.sheet_to_json(sheet, { defval: "" });
+  return { measurements: window.XLSX.utils.sheet_to_json(sheet, { defval: "" }), blocks: [] };
 }
 
 function sheetToMatrix(sheet) {
@@ -744,7 +764,8 @@ function sheetToMatrix(sheet) {
 }
 
 function parseViewDataSheet(rows) {
-  const parsed = [];
+  const measurements = [];
+  const blocks = [];
 
   rows.forEach((row, rowIndex) => {
     const machineCellIndex = row.findIndex((cell) => String(cell).toLowerCase().includes("machine name"));
@@ -761,6 +782,18 @@ function parseViewDataSheet(rows) {
     const velocityRmsColumn = findVelocityRmsColumn(rows, headerRows.groupRowIndex, headerRows.valueRowIndex);
     if (dateColumn === -1 || velocityRmsColumn === -1) return;
 
+    const block = {
+      machineName,
+      dateColumn,
+      valueColumn: velocityRmsColumn,
+      headerRows: [
+        normalizeRowLength(rows[rowIndex]),
+        normalizeRowLength(rows[headerRows.groupRowIndex]),
+        normalizeRowLength(rows[headerRows.valueRowIndex]),
+      ],
+      dataRows: [],
+    };
+
     for (let dataRowIndex = headerRows.valueRowIndex + 1; dataRowIndex < rows.length; dataRowIndex += 1) {
       const dataRow = rows[dataRowIndex];
       if (!dataRow?.length) continue;
@@ -771,7 +804,7 @@ function parseViewDataSheet(rows) {
       const vibration = parseNumber(dataRow[velocityRmsColumn]);
       if (!date || !vibration) continue;
 
-      parsed.push({
+      measurements.push({
         bomba: code,
         punto: point,
         fecha: date,
@@ -781,10 +814,19 @@ function parseViewDataSheet(rows) {
         nombre: code,
         area: "",
       });
+      block.dataRows.push(normalizeRowLength(dataRow));
     }
+
+    if (block.dataRows.length) blocks.push(block);
   });
 
-  return parsed;
+  return { measurements, blocks };
+}
+
+function normalizeRowLength(row, length = 29) {
+  const normalized = Array.from({ length }, (_, index) => row?.[index] ?? "");
+  while (normalized.length && normalized.at(-1) === "") normalized.pop();
+  return normalized;
 }
 
 function extractMachineName(value) {
@@ -949,6 +991,44 @@ function mergeMeasurements(rows) {
   return { measurements: importedMeasurements, pumps: touchedPumps.size };
 }
 
+function mergeViewDataBlocks(blocks) {
+  let importedRows = 0;
+
+  for (const block of blocks) {
+    let existing = state.viewDataBlocks.find((item) => item.machineName === block.machineName);
+    if (!existing) {
+      existing = {
+        machineName: block.machineName,
+        dateColumn: block.dateColumn,
+        valueColumn: block.valueColumn,
+        headerRows: block.headerRows,
+        dataRows: [],
+      };
+      state.viewDataBlocks.push(existing);
+    }
+
+    for (const row of block.dataRows) {
+      const rowKey = viewDataRowKey(existing, row);
+      const alreadyExists = existing.dataRows.some((item) => viewDataRowKey(existing, item) === rowKey);
+      if (alreadyExists) continue;
+
+      existing.dataRows.push(row);
+      importedRows += 1;
+    }
+
+    existing.dataRows.sort((a, b) => String(a[existing.dateColumn] ?? "").localeCompare(String(b[existing.dateColumn] ?? "")));
+  }
+
+  state.viewDataBlocks.sort((a, b) => a.machineName.localeCompare(b.machineName));
+  return { rows: importedRows, blocks: blocks.length };
+}
+
+function viewDataRowKey(block, row) {
+  const date = row[block.dateColumn] ?? "";
+  const value = row[block.valueColumn] ?? "";
+  return `${block.machineName}|${date}|${value}`;
+}
+
 function downloadHistoryExcel() {
   if (!window.XLSX) {
     showToast("No se pudo generar el Excel porque falta la libreria XLSX.");
@@ -970,6 +1050,8 @@ function downloadHistoryExcel() {
 }
 
 function buildViewDataExportRows() {
+  if (state.viewDataBlocks.length) return buildRawViewDataExportRows();
+
   const rows = [];
   const sortedPumps = [...state.pumps].sort((a, b) => a.code.localeCompare(b.code));
 
@@ -1057,6 +1139,22 @@ function buildViewDataExportRows() {
 
       rows.push([]);
     });
+  });
+
+  return rows.length ? rows : [["Machine Name:"], ["Sin datos importados"]];
+}
+
+function buildRawViewDataExportRows() {
+  const rows = [];
+
+  state.viewDataBlocks.forEach((block) => {
+    block.headerRows.forEach((row) => rows.push(row));
+    block.dataRows.forEach((row, index) => {
+      const outputRow = [...row];
+      outputRow[0] = index + 1;
+      rows.push(outputRow);
+    });
+    rows.push([]);
   });
 
   return rows.length ? rows : [["Machine Name:"], ["Sin datos importados"]];
