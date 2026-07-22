@@ -41,6 +41,14 @@ La medida que se guarda como vibracion es:
 
 Tras cada importacion con nuevas medidas, la app genera un Excel historico acumulado con hoja `viewdata` y estructura de bloques por bomba/punto.
 
+Si al importar no aparecen bombas, revisa:
+
+- Que el archivo tenga una hoja llamada `viewdata`.
+- Que los bloques empiecen por `Machine Name: codigo/punto`.
+- Que exista el grupo `OV-Velocity`.
+- Que dentro de ese grupo exista la columna `RMS(mm/s)`.
+- Que la app tenga conexion para cargar la libreria Excel si se abre como HTML local.
+
 - `bomba`, `codigo`, `codigo bomba`, `equipo`, `asset`, `machine`, `maquina`
 - `fecha`, `date`, `datetime`, `fecha medida`, `measurement date`
 - `punto`, `punto medida`, `measurement point`, `point`

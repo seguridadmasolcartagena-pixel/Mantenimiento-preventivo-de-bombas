@@ -124,6 +124,7 @@ const state = {
   query: "",
   filter: "Todas",
   pendingDeleteId: null,
+  importMessage: "",
 };
 
 const app = document.querySelector("#app");
@@ -252,6 +253,7 @@ function render() {
             <button class="button" id="addPump">+ Nueva bomba</button>
           </div>
         </section>
+        ${state.importMessage ? `<div class="import-message">${escapeHtml(state.importMessage)}</div>` : ""}
 
         <section class="workspace">
           <div class="panel">
@@ -685,10 +687,19 @@ async function importMeasurements(event) {
     const rows = await readMeasureFile(file);
     const result = mergeMeasurements(rows);
     savePumps();
+    if (!result.measurements) {
+      state.importMessage = "No se encontraron medidas nuevas. Revisa que la hoja sea viewdata y que tenga Machine Name, OV-Velocity y RMS(mm/s).";
+      render();
+      showToast("No se encontraron medidas nuevas.");
+      return;
+    }
+    state.importMessage = `Importacion correcta: ${result.measurements} medidas Velocity RMS en ${result.pumps} bombas.`;
     render();
     showToast(`${result.measurements} medidas importadas en ${result.pumps} bombas.`);
-    if (result.measurements) downloadHistoryExcel();
+    downloadHistoryExcel();
   } catch (error) {
+    state.importMessage = error.message || "No se pudo importar el archivo.";
+    render();
     showToast(error.message || "No se pudo importar el archivo.");
   } finally {
     event.target.value = "";
@@ -700,18 +711,36 @@ async function readMeasureFile(file) {
   if (extension === "csv") return parseCsv(await file.text());
 
   if (!window.XLSX) {
-    throw new Error("Para XLS/XLSX hace falta conexion a la libreria Excel. Exporta CSV o revisa la conexion.");
+    throw new Error("No se cargo la libreria Excel. Abre la app con conexion a internet o desde GitHub Pages.");
   }
 
   const buffer = await file.arrayBuffer();
   const workbook = window.XLSX.read(buffer, { type: "array" });
-  const sheetName = workbook.SheetNames.find((name) => name.toLowerCase() === "viewdata") ?? workbook.SheetNames[0];
+  const sheetName = workbook.SheetNames.find((name) => name.trim().toLowerCase() === "viewdata") ?? workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
-  const matrix = window.XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false });
+  if (!sheet) throw new Error("No se pudo abrir la hoja viewdata del Excel.");
+  const matrix = sheetToMatrix(sheet);
   const viewDataRows = parseViewDataSheet(matrix);
   if (viewDataRows.length) return viewDataRows;
 
   return window.XLSX.utils.sheet_to_json(sheet, { defval: "" });
+}
+
+function sheetToMatrix(sheet) {
+  const range = window.XLSX.utils.decode_range(sheet["!ref"] || "A1:A1");
+  const rows = [];
+
+  for (let rowIndex = range.s.r; rowIndex <= range.e.r; rowIndex += 1) {
+    const row = [];
+    for (let columnIndex = range.s.c; columnIndex <= range.e.c; columnIndex += 1) {
+      const address = window.XLSX.utils.encode_cell({ r: rowIndex, c: columnIndex });
+      const cell = sheet[address];
+      row.push(cell ? cell.w ?? cell.v ?? "" : "");
+    }
+    rows.push(row);
+  }
+
+  return rows;
 }
 
 function parseViewDataSheet(rows) {
@@ -725,14 +754,14 @@ function parseViewDataSheet(rows) {
     if (!machineName) return;
 
     const { code, point } = splitMachineName(machineName);
-    const headerRowIndex = findHeaderRow(rows, rowIndex);
-    if (headerRowIndex === -1) return;
+    const headerRows = findHeaderRows(rows, rowIndex);
+    if (!headerRows) return;
 
-    const dateColumn = findColumn(rows[headerRowIndex], ["date", "time"]);
-    const velocityRmsColumn = findVelocityRmsColumn(rows, headerRowIndex);
+    const dateColumn = findDateColumn(rows, headerRows.groupRowIndex, headerRows.valueRowIndex);
+    const velocityRmsColumn = findVelocityRmsColumn(rows, headerRows.groupRowIndex, headerRows.valueRowIndex);
     if (dateColumn === -1 || velocityRmsColumn === -1) return;
 
-    for (let dataRowIndex = headerRowIndex + 1; dataRowIndex < rows.length; dataRowIndex += 1) {
+    for (let dataRowIndex = headerRows.valueRowIndex + 1; dataRowIndex < rows.length; dataRowIndex += 1) {
       const dataRow = rows[dataRowIndex];
       if (!dataRow?.length) continue;
       if (dataRow.some((cell) => String(cell).toLowerCase().includes("machine name"))) break;
@@ -772,21 +801,39 @@ function splitMachineName(machineName) {
   };
 }
 
-function findHeaderRow(rows, machineRowIndex) {
-  for (let index = machineRowIndex + 1; index < Math.min(rows.length, machineRowIndex + 5); index += 1) {
+function findHeaderRows(rows, machineRowIndex) {
+  for (let index = machineRowIndex + 1; index < Math.min(rows.length, machineRowIndex + 8); index += 1) {
     const rowText = rows[index].map((cell) => String(cell).toLowerCase()).join(" ");
-    if (rowText.includes("record") && rowText.includes("rms")) return index;
+    const nextRowText = (rows[index + 1] ?? []).map((cell) => String(cell).toLowerCase()).join(" ");
+    if (rowText.includes("record") && rowText.includes("ov-velocity") && nextRowText.includes("rms")) {
+      return { groupRowIndex: index, valueRowIndex: index + 1 };
+    }
+    if (rowText.includes("record") && rowText.includes("rms")) {
+      return { groupRowIndex: index - 1, valueRowIndex: index };
+    }
   }
-  return -1;
+  return null;
 }
 
 function findColumn(row, terms) {
   return row.findIndex((cell) => terms.every((term) => cleanKey(cell).includes(cleanKey(term))));
 }
 
-function findVelocityRmsColumn(rows, headerRowIndex) {
-  const groupRow = rows[headerRowIndex - 1] ?? [];
-  const headerRow = rows[headerRowIndex] ?? [];
+function findDateColumn(rows, groupRowIndex, valueRowIndex) {
+  for (const index of [groupRowIndex, valueRowIndex, valueRowIndex + 1]) {
+    const row = rows[index] ?? [];
+    const column = findColumn(row, ["date", "time"]);
+    if (column !== -1) return column;
+  }
+
+  const headerRow = rows[valueRowIndex] ?? [];
+  if (cleanKey(headerRow[0]).includes("record")) return 1;
+  return -1;
+}
+
+function findVelocityRmsColumn(rows, groupRowIndex, valueRowIndex) {
+  const groupRow = rows[groupRowIndex] ?? [];
+  const headerRow = rows[valueRowIndex] ?? [];
   let inVelocityGroup = false;
 
   for (let column = 0; column < headerRow.length; column += 1) {
@@ -797,10 +844,25 @@ function findVelocityRmsColumn(rows, headerRowIndex) {
     if (inVelocityGroup && group && !group.includes("ovvelocity")) inVelocityGroup = false;
   }
 
-  return headerRow.findIndex((cell) => {
-    const header = cleanKey(cell);
-    return header.includes("rms") && header.includes("mms");
-  });
+  const velocityColumn = findColumnByText(groupRow, "ovvelocity");
+  if (velocityColumn !== -1) {
+    for (let column = velocityColumn; column < Math.min(headerRow.length, velocityColumn + 8); column += 1) {
+      const header = cleanKey(headerRow[column]);
+      if (header.includes("rms") && header.includes("mms")) return column;
+    }
+  }
+
+  return headerRow.findIndex((cell) => isVelocityRmsHeader(cell));
+}
+
+function findColumnByText(row, text) {
+  const target = cleanKey(text);
+  return row.findIndex((cell) => cleanKey(cell).includes(target));
+}
+
+function isVelocityRmsHeader(value) {
+  const header = cleanKey(value);
+  return header.includes("rms") && header.includes("mms");
 }
 
 function parseCsv(text) {
