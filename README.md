@@ -49,6 +49,31 @@ Si al importar no aparecen bombas, revisa:
 - Que dentro de ese grupo exista la columna `RMS(mm/s)`.
 - Que la app tenga conexion para cargar la libreria Excel si se abre como HTML local.
 
+## Actualizacion en SharePoint con Power Automate
+
+La app puede enviar el Excel maestro acumulado a un flujo de Power Automate en lugar de descargarlo automaticamente.
+
+En la app, usa `Configurar SharePoint` y pega la URL del disparador HTTP del flujo.
+
+El flujo debe recibir un JSON con:
+
+- `fileName`
+- `fileContentBase64`
+- `updatedAt`
+- `source`
+
+En Power Automate, el contenido del archivo se guarda en SharePoint usando:
+
+```text
+base64ToBinary(triggerBody()?['fileContentBase64'])
+```
+
+El archivo recomendado es:
+
+```text
+Historico_Bombas_Fluke.xlsx
+```
+
 - `bomba`, `codigo`, `codigo bomba`, `equipo`, `asset`, `machine`, `maquina`
 - `fecha`, `date`, `datetime`, `fecha medida`, `measurement date`
 - `punto`, `punto medida`, `measurement point`, `point`

@@ -1,5 +1,6 @@
 const STORAGE_KEY = "gestor-bombas-v3";
 const VIEWDATA_STORAGE_KEY = "gestor-bombas-viewdata-v1";
+const SHAREPOINT_FLOW_URL_KEY = "gestor-bombas-sharepoint-flow-url";
 const MEASUREMENT_POINTS = ["B-LA", "B-LOA", "M-LA", "M-LOA"];
 const POINT_COLORS = {
   "B-LA": "#0f766e",
@@ -126,6 +127,8 @@ const state = {
   query: "",
   filter: "Todas",
   pendingDeleteId: null,
+  showFlowConfig: false,
+  sharePointFlowUrl: loadSharePointFlowUrl(),
   importMessage: "",
 };
 
@@ -185,6 +188,15 @@ function loadViewDataBlocks() {
 
 function saveViewDataBlocks() {
   localStorage.setItem(VIEWDATA_STORAGE_KEY, JSON.stringify(state.viewDataBlocks));
+}
+
+function loadSharePointFlowUrl() {
+  return localStorage.getItem(SHAREPOINT_FLOW_URL_KEY) || "";
+}
+
+function saveSharePointFlowUrl(url) {
+  state.sharePointFlowUrl = url.trim();
+  localStorage.setItem(SHAREPOINT_FLOW_URL_KEY, state.sharePointFlowUrl);
 }
 
 function selectedPump() {
@@ -268,6 +280,7 @@ function render() {
             <input id="measureFile" type="file" accept=".csv,.xlsx,.xls,.xlsm" hidden />
             <button class="button secondary" id="importMeasures">Importar Excel/CSV</button>
             <button class="button secondary" id="downloadHistory">Descargar Excel maestro</button>
+            <button class="button secondary" id="configureFlow">Configurar SharePoint</button>
             <button class="button" id="addPump">+ Nueva bomba</button>
           </div>
         </section>
@@ -307,6 +320,7 @@ function render() {
       </main>
     </div>
     ${renderDeleteModal()}
+    ${renderFlowConfigModal()}
     <div class="toast" id="toast"></div>
   `;
 
@@ -567,6 +581,27 @@ function renderDeleteModal() {
   `;
 }
 
+function renderFlowConfigModal() {
+  if (!state.showFlowConfig) return "";
+
+  return `
+    <div class="modal-backdrop" role="presentation">
+      <section class="confirm-modal flow-modal" role="dialog" aria-modal="true" aria-labelledby="flowTitle">
+        <p class="eyebrow">SharePoint</p>
+        <h3 id="flowTitle">Configurar flujo de Power Automate</h3>
+        <p>Pega aqui la URL del disparador HTTP del flujo. La app enviara el Excel maestro actualizado a esa URL tras cada importacion.</p>
+        <form id="flowConfigForm" class="flow-form">
+          <textarea class="field" name="flowUrl" placeholder="https://prod-...logic.azure.com/..." required>${escapeHtml(state.sharePointFlowUrl)}</textarea>
+          <div class="modal-actions">
+            <button class="button secondary" type="button" id="cancelFlowConfig">Cancelar</button>
+            <button class="button" type="submit">Guardar conexion</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
 function renderIncidents(incidents) {
   const rows = [...incidents].sort((a, b) => b.date.localeCompare(a.date));
   if (!rows.length) return `<div class="empty-inline">No hay incidencias registradas.</div>`;
@@ -631,6 +666,9 @@ function bindEvents() {
   document.querySelector("#importMeasures")?.addEventListener("click", () => document.querySelector("#measureFile")?.click());
   document.querySelector("#measureFile")?.addEventListener("change", importMeasurements);
   document.querySelector("#downloadHistory")?.addEventListener("click", downloadHistoryExcel);
+  document.querySelector("#configureFlow")?.addEventListener("click", openFlowConfig);
+  document.querySelector("#cancelFlowConfig")?.addEventListener("click", closeFlowConfig);
+  document.querySelector("#flowConfigForm")?.addEventListener("submit", saveFlowConfig);
 }
 
 function addPump() {
@@ -697,6 +735,28 @@ function addIncident(event) {
   showToast("Incidencia añadida.");
 }
 
+function openFlowConfig() {
+  state.showFlowConfig = true;
+  render();
+}
+
+function closeFlowConfig() {
+  state.showFlowConfig = false;
+  render();
+}
+
+function saveFlowConfig(event) {
+  event.preventDefault();
+  const form = new FormData(event.target);
+  saveSharePointFlowUrl(String(form.get("flowUrl") ?? ""));
+  state.showFlowConfig = false;
+  state.importMessage = state.sharePointFlowUrl
+    ? "Conexion de SharePoint guardada. La proxima importacion enviara el Excel maestro al flujo."
+    : "No hay URL de Power Automate configurada.";
+  render();
+  showToast("Configuracion de SharePoint guardada.");
+}
+
 async function importMeasurements(event) {
   const file = event.target.files?.[0];
   if (!file) return;
@@ -716,7 +776,7 @@ async function importMeasurements(event) {
     state.importMessage = `Importacion correcta: ${result.measurements} medidas Velocity RMS en ${result.pumps} bombas. Excel historico actualizado con ${viewDataResult.rows} filas completas de ViewData.`;
     render();
     showToast(`${result.measurements} medidas importadas en ${result.pumps} bombas.`);
-    downloadHistoryExcel();
+    await updateSharePointExcel();
   } catch (error) {
     state.importMessage = error.message || "No se pudo importar el archivo.";
     render();
@@ -1035,6 +1095,11 @@ function downloadHistoryExcel() {
     return;
   }
 
+  const workbook = buildHistoryWorkbook();
+  window.XLSX.writeFile(workbook, `historico_vibraciones_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+function buildHistoryWorkbook() {
   const rows = buildViewDataExportRows();
   const workbook = window.XLSX.utils.book_new();
   const sheet = window.XLSX.utils.aoa_to_sheet(rows);
@@ -1046,7 +1111,43 @@ function downloadHistoryExcel() {
     ...Array.from({ length: 30 }, () => ({ wch: 12 })),
   ];
   window.XLSX.utils.book_append_sheet(workbook, sheet, "viewdata");
-  window.XLSX.writeFile(workbook, `historico_vibraciones_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  return workbook;
+}
+
+async function updateSharePointExcel() {
+  if (!state.sharePointFlowUrl) {
+    state.importMessage += " Configura SharePoint para enviar el Excel maestro automaticamente.";
+    render();
+    showToast("Configura SharePoint para actualizar el Excel maestro.");
+    return;
+  }
+
+  if (!window.XLSX) {
+    throw new Error("No se pudo generar el Excel maestro porque falta la libreria XLSX.");
+  }
+
+  const fileName = "Historico_Bombas_Fluke.xlsx";
+  const workbook = buildHistoryWorkbook();
+  const fileBase64 = window.XLSX.write(workbook, { bookType: "xlsx", type: "base64" });
+
+  const response = await fetch(state.sharePointFlowUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      fileName,
+      fileContentBase64: fileBase64,
+      updatedAt: new Date().toISOString(),
+      source: "App mantenimiento preventivo de bombas",
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Power Automate no pudo actualizar SharePoint. Codigo ${response.status}.`);
+  }
+
+  state.importMessage += " Excel maestro enviado a SharePoint mediante Power Automate.";
+  render();
+  showToast("Excel maestro actualizado en SharePoint.");
 }
 
 function buildViewDataExportRows() {

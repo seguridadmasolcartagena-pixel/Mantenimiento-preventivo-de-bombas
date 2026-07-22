@@ -733,6 +733,19 @@ td strong {
   flex-wrap: wrap;
 }
 
+.flow-modal {
+  width: min(620px, 100%);
+}
+
+.flow-form {
+  margin-top: 16px;
+}
+
+.flow-form textarea {
+  min-height: 112px;
+  resize: vertical;
+}
+
 @media (max-width: 980px) {
   .app-shell {
     grid-template-columns: 1fr;
