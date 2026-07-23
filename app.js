@@ -1136,16 +1136,18 @@ async function updateSharePointExcel() {
 
   const fileName = "Historico_Bombas_Fluke.xlsx";
   const workbook = buildHistoryWorkbook();
-  const fileBuffer = window.XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+  const fileBase64 = window.XLSX.write(workbook, { bookType: "xlsx", type: "base64" });
+  const fileContentDataUri = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${fileBase64}`;
 
   const response = await fetch(state.sharePointFlowUrl, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "X-File-Name": fileName,
-      "X-Updated-At": new Date().toISOString(),
-    },
-    body: fileBuffer,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      fileName,
+      fileContentDataUri,
+      updatedAt: new Date().toISOString(),
+      source: "App mantenimiento preventivo de bombas",
+    }),
   });
 
   if (!response.ok) {
