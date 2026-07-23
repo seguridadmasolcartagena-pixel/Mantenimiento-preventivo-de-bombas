@@ -205,16 +205,24 @@ function selectedPump() {
 }
 
 function filteredPumps() {
-  return state.pumps.filter((pump) => {
-    const query = state.query.trim().toLowerCase();
-    const matchesQuery =
-      !query ||
-      pump.code.toLowerCase().includes(query) ||
-      pump.name.toLowerCase().includes(query) ||
-      pump.area.toLowerCase().includes(query);
-    const matchesFilter = state.filter === "Todas" || pump.status === state.filter;
-    return matchesQuery && matchesFilter;
-  });
+  return state.pumps
+    .filter((pump) => {
+      const query = state.query.trim().toLowerCase();
+      const matchesQuery =
+        !query ||
+        pump.code.toLowerCase().includes(query) ||
+        pump.name.toLowerCase().includes(query) ||
+        pump.area.toLowerCase().includes(query);
+      const matchesFilter = state.filter === "Todas" || pump.status === state.filter;
+      return matchesQuery && matchesFilter;
+    })
+    .sort(comparePumpsAlphabetically);
+}
+
+function comparePumpsAlphabetically(a, b) {
+  const byCode = a.code.localeCompare(b.code, "es", { numeric: true, sensitivity: "base" });
+  if (byCode !== 0) return byCode;
+  return a.name.localeCompare(b.name, "es", { numeric: true, sensitivity: "base" });
 }
 
 function latestMeasurement(pump) {
