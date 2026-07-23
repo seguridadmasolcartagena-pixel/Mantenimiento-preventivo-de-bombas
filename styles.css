@@ -511,6 +511,20 @@ textarea.field {
   stroke-width: 1.5;
 }
 
+.chart .threshold-line line {
+  opacity: 0.72;
+  stroke-dasharray: 8 7;
+  stroke-linecap: butt;
+  stroke-width: 2;
+}
+
+.chart .threshold-line text {
+  paint-order: stroke;
+  stroke: #ffffff;
+  stroke-linejoin: round;
+  stroke-width: 4;
+}
+
 .chart path {
   fill: none;
   stroke: var(--accent);

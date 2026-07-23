@@ -152,6 +152,8 @@ function normalizePump(pump) {
     code: pump.code ?? "",
     name: pump.name ?? "Bomba sin nombre",
     area: pump.area ?? "Sin asignar",
+    aviso: pump.aviso ?? "",
+    alarma: pump.alarma ?? "",
     status: pump.status ?? "Operativa",
     measurements: Array.isArray(pump.measurements) ? pump.measurements.map(normalizeMeasurement) : [],
     incidents: Array.isArray(pump.incidents) ? pump.incidents : [],
@@ -403,6 +405,14 @@ function renderDetail(pump) {
           <input class="field" name="name" value="${escapeHtml(pump.name)}" required />
         </label>
         <label>
+          Aviso
+          <input class="field" name="aviso" type="number" step="0.01" min="0" inputmode="decimal" value="${escapeHtml(pump.aviso ?? "")}" />
+        </label>
+        <label>
+          Alarma
+          <input class="field" name="alarma" type="number" step="0.01" min="0" inputmode="decimal" value="${escapeHtml(pump.alarma ?? "")}" />
+        </label>
+        <label>
           Estado
           <select class="field" name="status">
             ${["Operativa", "En observacion", "Parada"]
@@ -421,7 +431,7 @@ function renderDetail(pump) {
           <h4>Grafica de vibracion</h4>
           <span>B-LA · B-LOA · M-LA · M-LOA</span>
         </div>
-        ${renderChart(pump.measurements)}
+        ${renderChart(pump)}
       </section>
 
       <section class="history-section">
@@ -454,8 +464,8 @@ function renderPointSummary(point, item) {
   `;
 }
 
-function renderChart(measurements) {
-  const items = [...measurements]
+function renderChart(pump) {
+  const items = [...pump.measurements]
     .map(normalizeMeasurement)
     .filter((item) => MEASUREMENT_POINTS.includes(item.point))
     .sort((a, b) => a.date.localeCompare(b.date));
@@ -468,12 +478,17 @@ function renderChart(measurements) {
   const pad = 34;
   const dates = [...new Set(items.map((item) => item.date))].slice(-10);
   const visibleItems = items.filter((item) => dates.includes(item.date));
-  const maxValue = Math.max(1, ...items.map((item) => Number(item.vibration)));
+  const thresholds = [
+    { key: "aviso", label: "Aviso", value: parseThreshold(pump.aviso), color: "#d97706" },
+    { key: "alarma", label: "Alarma", value: parseThreshold(pump.alarma), color: "#b42318" },
+  ].filter((threshold) => threshold.value !== null);
+  const maxValue = Math.max(1, ...items.map((item) => Number(item.vibration)), ...thresholds.map((item) => item.value));
   const xForDate = (date) => {
     const index = dates.indexOf(date);
     return dates.length === 1 ? width / 2 : pad + (index * (width - pad * 2)) / (dates.length - 1);
   };
   const yForValue = (value) => height - pad - (Number(value) / maxValue) * (height - pad * 2);
+  const thresholdLines = thresholds.map((threshold) => ({ ...threshold, y: yForValue(threshold.value) }));
 
   const series = MEASUREMENT_POINTS.map((point) => {
     const pointItems = visibleItems.filter((item) => item.point === point);
@@ -486,6 +501,18 @@ function renderChart(measurements) {
     <svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Grafica de vibracion">
       <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" />
       <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}" />
+      ${thresholdLines
+        .map(
+          (threshold, index) => `
+            <g class="threshold-line ${threshold.key}">
+              <line x1="${pad}" y1="${threshold.y.toFixed(1)}" x2="${width - pad}" y2="${threshold.y.toFixed(1)}" style="stroke: ${threshold.color}" />
+              <text x="${width - pad - 6}" y="${(threshold.y - 6 - index * 2).toFixed(1)}" text-anchor="end" style="fill: ${threshold.color}">
+                ${threshold.label} ${threshold.value}
+              </text>
+            </g>
+          `,
+        )
+        .join("")}
       ${series
         .map(
           (line) => `
@@ -516,6 +543,11 @@ function renderChart(measurements) {
       <text x="${width - pad}" y="${height - 8}" text-anchor="end">${escapeHtml(dates.at(-1))}</text>
     </svg>
   `;
+}
+
+function parseThreshold(value) {
+  const number = Number(String(value ?? "").replace(",", "."));
+  return Number.isFinite(number) && number > 0 ? number : null;
 }
 
 function renderMeasurementsTable(measurements) {
@@ -686,6 +718,8 @@ function addPump() {
     code: `P-${String(400 + nextNumber).padStart(3, "0")}`,
     name: "Nueva bomba",
     area: "Sin asignar",
+    aviso: "",
+    alarma: "",
     status: "Operativa",
     measurements: [],
     incidents: [],
@@ -711,6 +745,8 @@ function saveSelectedPump(event) {
     code: String(form.get("code") ?? "").trim(),
     name: String(form.get("name") ?? "").trim(),
     area: String(form.get("area") ?? "").trim(),
+    aviso: String(form.get("aviso") ?? "").trim(),
+    alarma: String(form.get("alarma") ?? "").trim(),
     status: String(form.get("status") ?? "Operativa"),
   };
 
@@ -1020,6 +1056,8 @@ function mergeMeasurements(rows) {
         code: normalized.code,
         name: normalized.name || normalized.code,
         area: normalized.area || "Importada",
+        aviso: "",
+        alarma: "",
         status: "Operativa",
         measurements: [],
         incidents: [],
@@ -1144,6 +1182,7 @@ async function updateSharePointExcel() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       fileName,
+      fileContentBase64: fileBase64,
       fileContentDataUri,
       updatedAt: new Date().toISOString(),
       source: "App mantenimiento preventivo de bombas",
@@ -1151,7 +1190,9 @@ async function updateSharePointExcel() {
   });
 
   if (!response.ok) {
-    throw new Error(`Power Automate no pudo actualizar SharePoint. Codigo ${response.status}.`);
+    const errorDetail = await response.text().catch(() => "");
+    const readableDetail = errorDetail ? ` Detalle: ${errorDetail.slice(0, 240)}` : "";
+    throw new Error(`Power Automate no pudo actualizar SharePoint. Codigo ${response.status}.${readableDetail}`);
   }
 
   state.importMessage += " Excel maestro enviado a SharePoint mediante Power Automate.";
