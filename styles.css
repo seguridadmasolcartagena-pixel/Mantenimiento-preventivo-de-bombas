@@ -753,10 +753,20 @@ td strong {
 
 .flow-form {
   margin-top: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.flow-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .flow-form textarea {
-  min-height: 112px;
+  min-height: 78px;
   resize: vertical;
 }
 

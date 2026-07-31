@@ -1,6 +1,11 @@
 const STORAGE_KEY = "gestor-bombas-v3";
 const VIEWDATA_STORAGE_KEY = "gestor-bombas-viewdata-v1";
 const SHAREPOINT_FLOW_URL_KEY = "gestor-bombas-sharepoint-flow-url";
+const SHAREPOINT_CONFIG_SAVE_URL_KEY = "gestor-bombas-config-save-flow-url";
+const SHAREPOINT_CONFIG_LOAD_URL_KEY = "gestor-bombas-config-load-flow-url";
+const DEFAULT_SHAREPOINT_FLOW_URL = "";
+const DEFAULT_CONFIG_SAVE_FLOW_URL = "";
+const DEFAULT_CONFIG_LOAD_FLOW_URL = "";
 const MEASUREMENT_POINTS = ["B-LA", "B-LOA", "M-LA", "M-LOA"];
 const POINT_COLORS = {
   "B-LA": "#0f766e",
@@ -127,8 +132,11 @@ const state = {
   query: "",
   filter: "Todas",
   pendingDeleteId: null,
+  pendingHistoryReset: false,
   showFlowConfig: false,
   sharePointFlowUrl: loadSharePointFlowUrl(),
+  configSaveFlowUrl: loadConfigSaveFlowUrl(),
+  configLoadFlowUrl: loadConfigLoadFlowUrl(),
   importMessage: "",
 };
 
@@ -193,12 +201,27 @@ function saveViewDataBlocks() {
 }
 
 function loadSharePointFlowUrl() {
-  return localStorage.getItem(SHAREPOINT_FLOW_URL_KEY) || "";
+  return localStorage.getItem(SHAREPOINT_FLOW_URL_KEY) || DEFAULT_SHAREPOINT_FLOW_URL;
 }
 
 function saveSharePointFlowUrl(url) {
   state.sharePointFlowUrl = url.trim();
   localStorage.setItem(SHAREPOINT_FLOW_URL_KEY, state.sharePointFlowUrl);
+}
+
+function loadConfigSaveFlowUrl() {
+  return localStorage.getItem(SHAREPOINT_CONFIG_SAVE_URL_KEY) || DEFAULT_CONFIG_SAVE_FLOW_URL;
+}
+
+function loadConfigLoadFlowUrl() {
+  return localStorage.getItem(SHAREPOINT_CONFIG_LOAD_URL_KEY) || DEFAULT_CONFIG_LOAD_FLOW_URL;
+}
+
+function saveConfigSyncUrls(saveUrl, loadUrl) {
+  state.configSaveFlowUrl = saveUrl.trim();
+  state.configLoadFlowUrl = loadUrl.trim();
+  localStorage.setItem(SHAREPOINT_CONFIG_SAVE_URL_KEY, state.configSaveFlowUrl);
+  localStorage.setItem(SHAREPOINT_CONFIG_LOAD_URL_KEY, state.configLoadFlowUrl);
 }
 
 function selectedPump() {
@@ -290,6 +313,7 @@ function render() {
             <input id="measureFile" type="file" accept=".csv,.xlsx,.xls,.xlsm" hidden />
             <button class="button secondary" id="importMeasures">Importar Excel/CSV</button>
             <button class="button secondary" id="downloadHistory">Descargar Excel maestro</button>
+            <button class="button secondary" id="resetHistory">Resetear historial</button>
             <button class="button secondary" id="configureFlow">Configurar SharePoint</button>
             <button class="button" id="addPump">+ Nueva bomba</button>
           </div>
@@ -330,6 +354,7 @@ function render() {
       </main>
     </div>
     ${renderDeleteModal()}
+    ${renderResetHistoryModal()}
     ${renderFlowConfigModal()}
     <div class="toast" id="toast"></div>
   `;
@@ -621,6 +646,24 @@ function renderDeleteModal() {
   `;
 }
 
+function renderResetHistoryModal() {
+  if (!state.pendingHistoryReset) return "";
+
+  return `
+    <div class="modal-backdrop" role="presentation">
+      <section class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="resetHistoryTitle">
+        <p class="eyebrow">Confirmacion</p>
+        <h3 id="resetHistoryTitle">¿Estás seguro de resetear el historial?</h3>
+        <p>Se borraran las medidas importadas y el historial de vibraciones guardado en esta aplicacion. Las bombas, avisos, alarmas e incidencias se conservaran.</p>
+        <div class="modal-actions">
+          <button class="button secondary" type="button" id="cancelResetHistory">Cancelar</button>
+          <button class="button danger" type="button" id="confirmResetHistory">Resetear historial</button>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
 function renderFlowConfigModal() {
   if (!state.showFlowConfig) return "";
 
@@ -629,9 +672,20 @@ function renderFlowConfigModal() {
       <section class="confirm-modal flow-modal" role="dialog" aria-modal="true" aria-labelledby="flowTitle">
         <p class="eyebrow">SharePoint</p>
         <h3 id="flowTitle">Configurar flujo de Power Automate</h3>
-        <p>Pega aqui la URL del disparador HTTP del flujo. La app enviara el Excel maestro actualizado a esa URL tras cada importacion.</p>
+        <p>Pega las URL de los disparadores HTTP. La app puede subir el Excel maestro y sincronizar automaticamente los datos compartidos.</p>
         <form id="flowConfigForm" class="flow-form">
-          <textarea class="field" name="flowUrl" placeholder="https://prod-...logic.azure.com/..." required>${escapeHtml(state.sharePointFlowUrl)}</textarea>
+          <label>
+            URL para subir Excel maestro
+            <textarea class="field" name="flowUrl" placeholder="https://prod-...logic.azure.com/...">${escapeHtml(state.sharePointFlowUrl)}</textarea>
+          </label>
+          <label>
+            URL para guardar datos compartidos
+            <textarea class="field" name="configSaveFlowUrl" placeholder="https://prod-...logic.azure.com/...">${escapeHtml(state.configSaveFlowUrl)}</textarea>
+          </label>
+          <label>
+            URL para cargar datos compartidos
+            <textarea class="field" name="configLoadFlowUrl" placeholder="https://prod-...logic.azure.com/...">${escapeHtml(state.configLoadFlowUrl)}</textarea>
+          </label>
           <div class="modal-actions">
             <button class="button secondary" type="button" id="cancelFlowConfig">Cancelar</button>
             <button class="button" type="submit">Guardar conexion</button>
@@ -701,6 +755,9 @@ function bindEvents() {
   document.querySelector("#deletePump")?.addEventListener("click", requestDeleteSelectedPump);
   document.querySelector("#cancelDelete")?.addEventListener("click", cancelDeletePump);
   document.querySelector("#confirmDelete")?.addEventListener("click", confirmDeletePump);
+  document.querySelector("#resetHistory")?.addEventListener("click", requestResetHistory);
+  document.querySelector("#cancelResetHistory")?.addEventListener("click", cancelResetHistory);
+  document.querySelector("#confirmResetHistory")?.addEventListener("click", confirmResetHistory);
   document.querySelector("#pumpForm")?.addEventListener("submit", saveSelectedPump);
   document.querySelector("#incidentForm")?.addEventListener("submit", addIncident);
   document.querySelector("#importMeasures")?.addEventListener("click", () => document.querySelector("#measureFile")?.click());
@@ -729,6 +786,7 @@ function addPump() {
   state.selectedId = pump.id;
   state.filter = "Todas";
   savePumps();
+  syncSharedData();
   render();
   showToast("Bomba creada.");
 }
@@ -752,6 +810,7 @@ function saveSelectedPump(event) {
 
   state.pumps = state.pumps.map((item) => (item.id === pump.id ? updated : item));
   savePumps();
+  syncSharedData();
   render();
   showToast("Cambios guardados.");
 }
@@ -775,6 +834,7 @@ function addIncident(event) {
     item.id === pump.id ? { ...item, incidents: [incident, ...item.incidents] } : item,
   );
   savePumps();
+  syncSharedData();
   render();
   showToast("Incidencia añadida.");
 }
@@ -793,10 +853,13 @@ function saveFlowConfig(event) {
   event.preventDefault();
   const form = new FormData(event.target);
   saveSharePointFlowUrl(String(form.get("flowUrl") ?? ""));
+  saveConfigSyncUrls(String(form.get("configSaveFlowUrl") ?? ""), String(form.get("configLoadFlowUrl") ?? ""));
   state.showFlowConfig = false;
-  state.importMessage = state.sharePointFlowUrl
-    ? "Conexion de SharePoint guardada. La proxima importacion enviara el Excel maestro al flujo."
-    : "No hay URL de Power Automate configurada.";
+  state.importMessage =
+    state.sharePointFlowUrl || state.configSaveFlowUrl || state.configLoadFlowUrl
+      ? "Conexion de SharePoint guardada."
+      : "No hay URL de Power Automate configurada.";
+  syncSharedData();
   render();
   showToast("Configuracion de SharePoint guardada.");
 }
@@ -811,6 +874,7 @@ async function importMeasurements(event) {
     const viewDataResult = mergeViewDataBlocks(importData.blocks);
     savePumps();
     saveViewDataBlocks();
+    syncSharedData();
     if (!result.measurements) {
       state.importMessage = "No se encontraron medidas nuevas. Revisa que la hoja sea viewdata y que tenga Machine Name, OV-Velocity y RMS(mm/s).";
       render();
@@ -1200,6 +1264,62 @@ async function updateSharePointExcel() {
   showToast("Excel maestro actualizado en SharePoint.");
 }
 
+function sharedDataPayload() {
+  return {
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    source: "App mantenimiento preventivo de bombas",
+    pumps: state.pumps,
+    viewDataBlocks: state.viewDataBlocks,
+  };
+}
+
+async function syncSharedData() {
+  if (!state.configSaveFlowUrl) return;
+
+  try {
+    const response = await fetch(state.configSaveFlowUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(sharedDataPayload()),
+    });
+
+    if (!response.ok) throw new Error(`Codigo ${response.status}`);
+  } catch (error) {
+    console.warn("No se pudo sincronizar la configuracion compartida.", error);
+  }
+}
+
+async function loadSharedDataFromSharePoint() {
+  if (!state.configLoadFlowUrl) return false;
+
+  try {
+    const response = await fetch(state.configLoadFlowUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source: "App mantenimiento preventivo de bombas" }),
+    });
+
+    if (!response.ok) throw new Error(`Codigo ${response.status}`);
+
+    const data = await response.json();
+    const sharedData = typeof data.appData === "string" ? JSON.parse(data.appData) : data.appData || data;
+    if (!Array.isArray(sharedData.pumps)) return false;
+
+    state.pumps = sharedData.pumps.map(normalizePump);
+    state.viewDataBlocks = Array.isArray(sharedData.viewDataBlocks) ? sharedData.viewDataBlocks : [];
+    state.selectedId = state.pumps[0]?.id ?? null;
+    savePumps();
+    saveViewDataBlocks();
+    state.importMessage = "Datos compartidos cargados desde SharePoint.";
+    return true;
+  } catch (error) {
+    state.importMessage = "No se pudieron cargar los datos compartidos desde SharePoint. Se usaran los datos locales.";
+    console.warn("No se pudieron cargar los datos compartidos.", error);
+    return false;
+  }
+}
+
 function buildViewDataExportRows() {
   if (state.viewDataBlocks.length) return buildRawViewDataExportRows();
 
@@ -1462,8 +1582,31 @@ function confirmDeletePump() {
   state.pendingDeleteId = null;
   state.selectedId = state.pumps[0]?.id ?? null;
   savePumps();
+  syncSharedData();
   render();
   showToast("Bomba eliminada.");
+}
+
+function requestResetHistory() {
+  state.pendingHistoryReset = true;
+  render();
+}
+
+function cancelResetHistory() {
+  state.pendingHistoryReset = false;
+  render();
+}
+
+function confirmResetHistory() {
+  state.pumps = state.pumps.map((pump) => ({ ...pump, measurements: [] }));
+  state.viewDataBlocks = [];
+  state.pendingHistoryReset = false;
+  state.importMessage = "Historial de vibraciones reseteado.";
+  savePumps();
+  saveViewDataBlocks();
+  syncSharedData();
+  render();
+  showToast("Historial reseteado.");
 }
 
 function showToast(message) {
@@ -1495,4 +1638,9 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-render();
+async function initApp() {
+  await loadSharedDataFromSharePoint();
+  render();
+}
+
+initApp();
