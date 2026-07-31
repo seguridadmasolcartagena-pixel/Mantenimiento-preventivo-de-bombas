@@ -314,6 +314,7 @@ function render() {
             <button class="button secondary" id="importMeasures">Importar Excel/CSV</button>
             <button class="button secondary" id="downloadHistory">Descargar Excel maestro</button>
             <button class="button secondary" id="resetHistory">Resetear historial</button>
+            <button class="button secondary" id="loadSharedTop">Cargar memoria</button>
             <button class="button secondary" id="configureFlow">Configurar SharePoint</button>
             <button class="button" id="addPump">+ Nueva bomba</button>
           </div>
@@ -686,6 +687,11 @@ function renderFlowConfigModal() {
             URL para cargar datos compartidos
             <textarea class="field" name="configLoadFlowUrl" placeholder="https://prod-...logic.azure.com/...">${escapeHtml(state.configLoadFlowUrl)}</textarea>
           </label>
+          <div class="flow-tools">
+            <input id="memoryJsonFile" type="file" accept=".json,application/json" hidden />
+            <button class="button secondary" type="button" id="loadSharedNow">Cargar ahora desde SharePoint</button>
+            <button class="button secondary" type="button" id="importMemoryJson">Importar memoria JSON</button>
+          </div>
           <div class="modal-actions">
             <button class="button secondary" type="button" id="cancelFlowConfig">Cancelar</button>
             <button class="button" type="submit">Guardar conexion</button>
@@ -763,9 +769,13 @@ function bindEvents() {
   document.querySelector("#importMeasures")?.addEventListener("click", () => document.querySelector("#measureFile")?.click());
   document.querySelector("#measureFile")?.addEventListener("change", importMeasurements);
   document.querySelector("#downloadHistory")?.addEventListener("click", downloadHistoryExcel);
+  document.querySelector("#loadSharedTop")?.addEventListener("click", loadSharedDataManually);
   document.querySelector("#configureFlow")?.addEventListener("click", openFlowConfig);
   document.querySelector("#cancelFlowConfig")?.addEventListener("click", closeFlowConfig);
   document.querySelector("#flowConfigForm")?.addEventListener("submit", saveFlowConfig);
+  document.querySelector("#loadSharedNow")?.addEventListener("click", loadSharedDataManually);
+  document.querySelector("#importMemoryJson")?.addEventListener("click", () => document.querySelector("#memoryJsonFile")?.click());
+  document.querySelector("#memoryJsonFile")?.addEventListener("change", importMemoryJsonFile);
 }
 
 function addPump() {
@@ -857,9 +867,8 @@ function saveFlowConfig(event) {
   state.showFlowConfig = false;
   state.importMessage =
     state.sharePointFlowUrl || state.configSaveFlowUrl || state.configLoadFlowUrl
-      ? "Conexion de SharePoint guardada."
+      ? "Conexion de SharePoint guardada. Usa cargar ahora para traer la memoria compartida."
       : "No hay URL de Power Automate configurada.";
-  syncSharedData();
   render();
   showToast("Configuracion de SharePoint guardada.");
 }
@@ -1290,7 +1299,32 @@ async function syncSharedData() {
   }
 }
 
-async function loadSharedDataFromSharePoint() {
+async function loadSharedDataManually() {
+  const loaded = await loadSharedDataFromSharePoint({ manual: true });
+  render();
+  showToast(loaded ? "Memoria cargada desde SharePoint." : "No se pudo cargar la memoria.");
+}
+
+async function importMemoryJsonFile(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  try {
+    const sharedData = parseSharedDataPayload(await file.text());
+    applySharedData(sharedData);
+    state.importMessage = `Memoria JSON importada: ${state.pumps.length} bombas cargadas.`;
+    render();
+    showToast("Memoria JSON importada.");
+  } catch (error) {
+    state.importMessage = error.message || "No se pudo importar la memoria JSON.";
+    render();
+    showToast("No se pudo importar el JSON.");
+  } finally {
+    event.target.value = "";
+  }
+}
+
+async function loadSharedDataFromSharePoint({ manual = false } = {}) {
   if (!state.configLoadFlowUrl) return false;
 
   try {
@@ -1302,22 +1336,65 @@ async function loadSharedDataFromSharePoint() {
 
     if (!response.ok) throw new Error(`Codigo ${response.status}`);
 
-    const data = await response.json();
-    const sharedData = typeof data.appData === "string" ? JSON.parse(data.appData) : data.appData || data;
-    if (!Array.isArray(sharedData.pumps)) return false;
+    const responseText = await response.text();
+    const sharedData = parseSharedDataPayload(responseText);
+    const remotePumpCount = sharedData.pumps.length;
 
-    state.pumps = sharedData.pumps.map(normalizePump);
-    state.viewDataBlocks = Array.isArray(sharedData.viewDataBlocks) ? sharedData.viewDataBlocks : [];
-    state.selectedId = state.pumps[0]?.id ?? null;
-    savePumps();
-    saveViewDataBlocks();
-    state.importMessage = "Datos compartidos cargados desde SharePoint.";
+    if (!manual && state.pumps.length && !remotePumpCount) {
+      state.importMessage = "SharePoint devolvio una memoria vacia. Se conservaron los datos locales.";
+      return false;
+    }
+
+    applySharedData(sharedData);
+    state.importMessage = `Datos compartidos cargados desde SharePoint: ${remotePumpCount} bombas.`;
     return true;
   } catch (error) {
-    state.importMessage = "No se pudieron cargar los datos compartidos desde SharePoint. Se usaran los datos locales.";
+    state.importMessage = `No se pudieron cargar los datos compartidos desde SharePoint. ${error.message || "Se usaran los datos locales."}`;
     console.warn("No se pudieron cargar los datos compartidos.", error);
     return false;
   }
+}
+
+function parseSharedDataPayload(payload) {
+  let data = payload;
+
+  if (typeof data === "string") {
+    const trimmed = data.trim();
+    if (!trimmed) throw new Error("La respuesta de Power Automate esta vacia.");
+    data = JSON.parse(trimmed);
+  }
+
+  if (data?.appData) {
+    data = typeof data.appData === "string" ? JSON.parse(data.appData) : data.appData;
+  }
+
+  if (data?.$content) {
+    data = JSON.parse(decodeBase64Text(data.$content));
+  }
+
+  if (!Array.isArray(data?.pumps)) {
+    throw new Error("El JSON recibido no contiene la lista pumps.");
+  }
+
+  return {
+    pumps: data.pumps,
+    viewDataBlocks: Array.isArray(data.viewDataBlocks) ? data.viewDataBlocks : [],
+  };
+}
+
+function decodeBase64Text(value) {
+  const binary = atob(value);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder("utf-8").decode(bytes);
+}
+
+function applySharedData(sharedData) {
+  state.pumps = sharedData.pumps.map(normalizePump);
+  state.viewDataBlocks = sharedData.viewDataBlocks;
+  state.selectedId = state.pumps[0]?.id ?? null;
+  state.filter = "Todas";
+  savePumps();
+  saveViewDataBlocks();
 }
 
 function buildViewDataExportRows() {

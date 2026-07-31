@@ -74,6 +74,24 @@ El archivo recomendado es:
 Historico_Bombas_Fluke.xlsx
 ```
 
+## Memoria compartida de la app
+
+La app puede guardar y cargar su memoria compartida desde SharePoint mediante dos flujos HTTP:
+
+- `URL para guardar datos compartidos`: recibe el JSON completo de memoria y actualiza `memoria_bombas.json`.
+- `URL para cargar datos compartidos`: devuelve el contenido de `memoria_bombas.json` a la app.
+
+La memoria contiene:
+
+- bombas
+- medidas importadas
+- incidencias
+- bloques `viewdata` usados para reconstruir el Excel historico
+
+Para recuperar datos desde SharePoint, usa el boton `Cargar memoria`. Si Power Automate no devuelve bien el JSON, descarga `memoria_bombas.json` desde SharePoint y usa `Configurar SharePoint > Importar memoria JSON`.
+
+Al guardar la configuracion de SharePoint, la app ya no envia automaticamente la memoria local. Esto evita sobrescribir SharePoint con una pantalla vacia por error.
+
 - `bomba`, `codigo`, `codigo bomba`, `equipo`, `asset`, `machine`, `maquina`
 - `fecha`, `date`, `datetime`, `fecha medida`, `measurement date`
 - `punto`, `punto medida`, `measurement point`, `point`

@@ -770,6 +770,16 @@ td strong {
   resize: vertical;
 }
 
+.flow-tools {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(247, 248, 245, 0.72);
+}
+
 @media (max-width: 980px) {
   .app-shell {
     grid-template-columns: 1fr;
