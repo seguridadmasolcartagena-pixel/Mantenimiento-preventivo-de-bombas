@@ -344,7 +344,7 @@ function render() {
             </div>
           </div>
 
-          <div class="panel detail">
+          <div class="panel detail" id="pumpDetail">
             ${
               selected
                 ? renderDetail(selected)
@@ -739,8 +739,7 @@ function bindEvents() {
 
   document.querySelectorAll("[data-select]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.selectedId = button.dataset.select;
-      render();
+      selectPump(button.dataset.select);
     });
   });
 
@@ -781,6 +780,14 @@ function bindEvents() {
   document.querySelector("#loadSharedNow")?.addEventListener("click", loadSharedDataManually);
   document.querySelector("#importMemoryJson")?.addEventListener("click", () => document.querySelector("#memoryJsonFile")?.click());
   document.querySelector("#memoryJsonFile")?.addEventListener("change", importMemoryJsonFile);
+}
+
+function selectPump(id) {
+  state.selectedId = id;
+  render();
+  window.requestAnimationFrame(() => {
+    document.querySelector("#pumpDetail")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 }
 
 document.addEventListener("keydown", (event) => {
