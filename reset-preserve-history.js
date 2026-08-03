@@ -12,13 +12,6 @@
   }
 
   function selectedPumpCode() {
-    const modalCode = document.querySelector("#resetPumpTitle")
-      ?.closest(".confirm-modal")
-      ?.querySelector("p strong")
-      ?.textContent
-      ?.trim();
-    if (modalCode) return modalCode;
-
     const detailTitle = document.querySelector("#pumpDetail .panel-header h3")?.textContent || "";
     return detailTitle.split("·")[0]?.trim() || "";
   }
@@ -40,8 +33,8 @@
     }).catch(() => undefined);
   }
 
-  async function resetPumpPreservingMasterHistory(event) {
-    const button = event.target?.closest?.("#confirmResetPump");
+  async function resetPumpWithoutModal(event) {
+    const button = event.target?.closest?.("#resetPump");
     if (!button) return;
 
     event.preventDefault();
@@ -49,10 +42,18 @@
     event.stopImmediatePropagation();
 
     const code = selectedPumpCode();
+    if (!code) return;
+
+    const confirmed = window.confirm(
+      `Estas seguro de resetear ${code}? Se limpiaran sus medidas activas, pero el historial maestro se conservara.`,
+    );
+    if (!confirmed) return;
+
     const pumps = parseJson(localStorage.getItem(PUMPS_KEY), []);
     const viewDataBlocks = parseJson(localStorage.getItem(VIEWDATA_KEY), []);
+    const normalizedCode = code.toLowerCase();
     const updatedPumps = pumps.map((pump) =>
-      String(pump.code || "").trim().toLowerCase() === code.toLowerCase()
+      String(pump.code || "").trim().toLowerCase() === normalizedCode
         ? { ...pump, measurements: [] }
         : pump,
     );
@@ -63,22 +64,5 @@
     window.location.reload();
   }
 
-  function updateResetCopyOnce() {
-    const title = document.querySelector("#resetPumpTitle");
-    const paragraph = title?.closest(".confirm-modal")?.querySelector("p:not(.eyebrow)");
-    const code = paragraph?.querySelector("strong")?.textContent || selectedPumpCode();
-    if (!paragraph || !code) return;
-
-    const nextText = `Se limpiaran las medidas activas de ${code} para iniciar una nueva etapa de seguimiento. El historial maestro importado se conservara para analisis de tendencias.`;
-    if (paragraph.textContent.trim() === nextText) return;
-
-    paragraph.innerHTML = `Se limpiaran las medidas activas de <strong>${code}</strong> para iniciar una nueva etapa de seguimiento. El historial maestro importado se conservara para analisis de tendencias.`;
-  }
-
-  document.addEventListener("click", (event) => {
-    if (event.target?.closest?.("#resetPump")) {
-      window.setTimeout(updateResetCopyOnce, 0);
-    }
-  });
-  document.addEventListener("click", resetPumpPreservingMasterHistory, true);
+  document.addEventListener("click", resetPumpWithoutModal, true);
 })();
