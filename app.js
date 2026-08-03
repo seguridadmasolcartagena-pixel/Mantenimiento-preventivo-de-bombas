@@ -6,6 +6,8 @@ const SHAREPOINT_CONFIG_LOAD_URL_KEY = "gestor-bombas-config-load-flow-url";
 const DEFAULT_SHAREPOINT_FLOW_URL = "";
 const DEFAULT_CONFIG_SAVE_FLOW_URL = "";
 const DEFAULT_CONFIG_LOAD_FLOW_URL = "";
+const FILTER_STATUSES = ["Todas", "Operativa", "Aviso", "Alarma", "Parada"];
+const MANUAL_STATUSES = ["Operativa", "Parada"];
 const MEASUREMENT_POINTS = ["B-LA", "B-LOA", "M-LA", "M-LOA"];
 const POINT_COLORS = {
   "B-LA": "#0f766e",
@@ -162,7 +164,7 @@ function normalizePump(pump) {
     area: pump.area ?? "Sin asignar",
     aviso: pump.aviso ?? "",
     alarma: pump.alarma ?? "",
-    status: pump.status ?? "Operativa",
+    status: normalizeStatus(pump.status),
     measurements: Array.isArray(pump.measurements) ? pump.measurements.map(normalizeMeasurement) : [],
     incidents: Array.isArray(pump.incidents) ? pump.incidents : [],
   };
@@ -233,12 +235,13 @@ function filteredPumps() {
   return state.pumps
     .filter((pump) => {
       const query = state.query.trim().toLowerCase();
+      const pumpStatus = calculatedPumpStatus(pump);
       const matchesQuery =
         !query ||
         pump.code.toLowerCase().includes(query) ||
         pump.name.toLowerCase().includes(query) ||
         pump.area.toLowerCase().includes(query);
-      const matchesFilter = state.filter === "Todas" || pump.status === state.filter;
+      const matchesFilter = state.filter === "Todas" || pumpStatus === state.filter;
       return matchesQuery && matchesFilter;
     })
     .sort(comparePumpsAlphabetically);
@@ -251,32 +254,65 @@ function comparePumpsAlphabetically(a, b) {
 }
 
 function latestMeasurement(pump) {
-  return [...pump.measurements].sort((a, b) => a.date.localeCompare(b.date)).at(-1) ?? null;
+  return [...pump.measurements].sort(compareMeasurements).at(-1) ?? null;
 }
 
 function latestMeasurementsByPoint(pump) {
   const latest = Object.fromEntries(MEASUREMENT_POINTS.map((point) => [point, null]));
-  for (const item of [...pump.measurements].sort((a, b) => a.date.localeCompare(b.date))) {
+  for (const item of [...pump.measurements].sort(compareMeasurements)) {
     if (MEASUREMENT_POINTS.includes(item.point)) latest[item.point] = item;
   }
   return latest;
 }
 
+function compareMeasurements(a, b) {
+  const aDate = a.dateTime || a.date || "";
+  const bDate = b.dateTime || b.date || "";
+  return aDate.localeCompare(bDate);
+}
+
+function normalizeStatus(status) {
+  if (status === "En observacion") return "Aviso";
+  if (status === "Alarma") return "Alarma";
+  if (status === "Aviso") return "Aviso";
+  if (status === "Parada") return "Parada";
+  return "Operativa";
+}
+
+function calculatedPumpStatus(pump) {
+  const baseStatus = normalizeStatus(pump.status);
+  if (baseStatus === "Parada") return "Parada";
+
+  const latestByPoint = latestMeasurementsByPoint(pump);
+  const latestValues = Object.values(latestByPoint)
+    .filter(Boolean)
+    .map((item) => Number(item.vibration))
+    .filter((value) => Number.isFinite(value));
+  const alarmThreshold = parseThreshold(pump.alarma);
+  const warningThreshold = parseThreshold(pump.aviso);
+
+  if (alarmThreshold !== null && latestValues.some((value) => value > alarmThreshold)) return "Alarma";
+  if (warningThreshold !== null && latestValues.some((value) => value > warningThreshold)) return "Aviso";
+  if (baseStatus === "Aviso" || baseStatus === "Alarma") return baseStatus;
+  return "Operativa";
+}
+
 function statusClass(status) {
   if (status === "Operativa") return "ok";
-  if (status === "En observacion") return "warn";
+  if (status === "Aviso") return "warn";
+  if (status === "Alarma") return "alarm";
   return "stop";
 }
 
 function render() {
   const selected = selectedPump();
   const pumps = filteredPumps();
-  const counts = {
-    Todas: state.pumps.length,
-    Operativa: state.pumps.filter((pump) => pump.status === "Operativa").length,
-    "En observacion": state.pumps.filter((pump) => pump.status === "En observacion").length,
-    Parada: state.pumps.filter((pump) => pump.status === "Parada").length,
-  };
+  const counts = Object.fromEntries(
+    FILTER_STATUSES.map((status) => [
+      status,
+      status === "Todas" ? state.pumps.length : state.pumps.filter((pump) => calculatedPumpStatus(pump) === status).length,
+    ]),
+  );
 
   app.innerHTML = `
     <div class="app-shell">
@@ -289,7 +325,7 @@ function render() {
           </div>
         </div>
         <nav class="nav-section" aria-label="Filtros por estado">
-          ${["Todas", "Operativa", "En observacion", "Parada"]
+          ${FILTER_STATUSES
             .map(
               (status) => `
                 <button class="nav-button ${state.filter === status ? "active" : ""}" data-filter="${status}">
@@ -330,7 +366,7 @@ function render() {
             <div class="search-row">
               <input class="field" id="search" type="search" placeholder="Buscar bomba, area o codigo" value="${escapeHtml(state.query)}" />
               <select class="field" id="statusFilter">
-                ${["Todas", "Operativa", "En observacion", "Parada"]
+                ${FILTER_STATUSES
                   .map((status) => `<option value="${status}" ${state.filter === status ? "selected" : ""}>${status}</option>`)
                   .join("")}
               </select>
@@ -365,7 +401,8 @@ function render() {
 
 function renderPumpRow(pump) {
   const latest = latestMeasurement(pump);
-  const status = statusClass(pump.status);
+  const pumpStatus = calculatedPumpStatus(pump);
+  const status = statusClass(pumpStatus);
 
   return `
     <button class="pump-row ${pump.id === state.selectedId ? "active" : ""}" data-select="${pump.id}">
@@ -376,7 +413,7 @@ function renderPumpRow(pump) {
         </div>
         <div class="pump-meta">
           <span class="tag">${escapeHtml(pump.area)}</span>
-          <span class="tag ${status}">${escapeHtml(pump.status)}</span>
+          <span class="tag ${status}">${escapeHtml(pumpStatus)}</span>
           <span class="tag">${latest ? `${latest.vibration} ${latest.unit}` : "sin medidas"}</span>
           <span class="tag">${pump.incidents.length} incid.</span>
         </div>
@@ -387,7 +424,8 @@ function renderPumpRow(pump) {
 }
 
 function renderDetail(pump) {
-  const status = statusClass(pump.status);
+  const pumpStatus = calculatedPumpStatus(pump);
+  const status = statusClass(pumpStatus);
   const latest = latestMeasurement(pump);
   const latestByPoint = latestMeasurementsByPoint(pump);
   const average = pump.measurements.length
@@ -398,7 +436,7 @@ function renderDetail(pump) {
   return `
     <div class="panel-header">
       <h3>${escapeHtml(pump.code)} · ${escapeHtml(pump.name)}</h3>
-      <span class="tag ${status}">${escapeHtml(pump.status)}</span>
+      <span class="tag ${status}">${escapeHtml(pumpStatus)}</span>
     </div>
     <div class="detail-body">
       <div class="metrics">
@@ -439,13 +477,16 @@ function renderDetail(pump) {
           <input class="field" name="alarma" type="number" step="0.01" min="0" inputmode="decimal" value="${escapeHtml(pump.alarma ?? "")}" />
         </label>
         <label>
-          Estado
+          Estado operativo
           <select class="field" name="status">
-            ${["Operativa", "En observacion", "Parada"]
-              .map((statusOption) => `<option value="${statusOption}" ${pump.status === statusOption ? "selected" : ""}>${statusOption}</option>`)
+            ${MANUAL_STATUSES
+              .map((statusOption) => `<option value="${statusOption}" ${normalizeStatus(pump.status) === statusOption ? "selected" : ""}>${statusOption}</option>`)
               .join("")}
           </select>
         </label>
+        <div class="status-explain">
+          Estado actual: <strong>${escapeHtml(pumpStatus)}</strong>. Aviso y Alarma se calculan con las ultimas medidas de B-LA, B-LOA, M-LA y M-LOA.
+        </div>
         <div class="detail-actions">
           <button class="button danger" type="button" id="deletePump">Eliminar bomba</button>
           <button class="button" type="submit">Guardar</button>

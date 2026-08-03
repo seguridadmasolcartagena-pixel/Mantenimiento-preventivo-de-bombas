@@ -110,3 +110,14 @@ Cada bomba se interpreta con estos cuatro puntos:
 - `B-LOA`: bomba, lado opuesto al acoplamiento.
 - `M-LA`: motor, lado acoplamiento.
 - `M-LOA`: motor, lado opuesto al acoplamiento.
+
+## Estados automaticos
+
+La app calcula el estado visible de cada bomba con las ultimas medidas disponibles de los cuatro puntos:
+
+- `Operativa`: ninguna ultima medida supera los umbrales configurados.
+- `Aviso`: una o mas ultimas medidas superan el valor de `Aviso`.
+- `Alarma`: una o mas ultimas medidas superan el valor de `Alarma`.
+- `Parada`: estado operativo manual; tiene prioridad sobre Aviso y Alarma.
+
+Si una medida supera los dos umbrales, prevalece `Alarma`.

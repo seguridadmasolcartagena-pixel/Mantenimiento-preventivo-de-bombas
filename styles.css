@@ -353,6 +353,11 @@ button {
   color: var(--warning);
 }
 
+.tag.alarm {
+  background: #ffe7e2;
+  color: var(--danger);
+}
+
 .tag.stop {
   background: var(--danger-soft);
   color: var(--danger);
@@ -370,8 +375,12 @@ button {
   background: #d97706;
 }
 
-.status-dot.stop {
+.status-dot.alarm {
   background: var(--danger);
+}
+
+.status-dot.stop {
+  background: #5f6460;
 }
 
 .detail {
@@ -470,6 +479,21 @@ textarea.field {
 .compact-form .detail-actions {
   margin-top: 0;
   justify-content: flex-end;
+}
+
+.status-explain {
+  grid-column: 1 / -1;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.status-explain strong {
+  color: var(--text);
 }
 
 .history-section {
