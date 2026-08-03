@@ -63,16 +63,22 @@
     window.location.reload();
   }
 
-  function updateResetCopy() {
+  function updateResetCopyOnce() {
     const title = document.querySelector("#resetPumpTitle");
     const paragraph = title?.closest(".confirm-modal")?.querySelector("p:not(.eyebrow)");
     const code = paragraph?.querySelector("strong")?.textContent || selectedPumpCode();
     if (!paragraph || !code) return;
 
+    const nextText = `Se limpiaran las medidas activas de ${code} para iniciar una nueva etapa de seguimiento. El historial maestro importado se conservara para analisis de tendencias.`;
+    if (paragraph.textContent.trim() === nextText) return;
+
     paragraph.innerHTML = `Se limpiaran las medidas activas de <strong>${code}</strong> para iniciar una nueva etapa de seguimiento. El historial maestro importado se conservara para analisis de tendencias.`;
   }
 
+  document.addEventListener("click", (event) => {
+    if (event.target?.closest?.("#resetPump")) {
+      window.setTimeout(updateResetCopyOnce, 0);
+    }
+  });
   document.addEventListener("click", resetPumpPreservingMasterHistory, true);
-  new MutationObserver(updateResetCopy).observe(document.documentElement, { childList: true, subtree: true });
-  updateResetCopy();
 })();
