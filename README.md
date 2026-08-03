@@ -6,12 +6,13 @@ Aplicacion web estatica para consultar el historial de vibraciones e incidencias
 
 - Listado de bombas por estado.
 - Ficha individual de cada bomba.
-- Importacion de medidas desde Excel o CSV generado por el Fluke 805 FC.
+- Importacion de medidas desde Excel generado por el Fluke 805 FC.
 - Grafica de evolucion de vibracion.
 - Cuatro puntos de medida fijos por bomba: `B-LA`, `B-LOA`, `M-LA`, `M-LOA`.
 - Historial de medidas por bomba.
 - Registro manual de incidencias por operario.
 - Eliminacion de bombas con confirmacion previa.
+- Reseteo del historial de una bomba con confirmacion previa.
 
 ## Uso
 

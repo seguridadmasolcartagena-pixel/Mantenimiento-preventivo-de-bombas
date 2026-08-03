@@ -56,7 +56,7 @@ const demoPumps = [
     code: "P-204B",
     name: "Recirculacion tanque intermedio",
     area: "Tanques",
-    status: "En observacion",
+    status: "Aviso",
     measurements: [
       measurement("2026-07-02", "B-LA", 3.2),
       measurement("2026-07-02", "B-LOA", 2.9),
@@ -134,6 +134,7 @@ const state = {
   query: "",
   filter: "Todas",
   pendingDeleteId: null,
+  pendingPumpResetId: null,
   pendingHistoryReset: false,
   showFlowConfig: false,
   sharePointFlowUrl: loadSharePointFlowUrl(),
@@ -346,11 +347,10 @@ function render() {
             <p>Importa las medidas del equipo, registra incidencias de operacion y consulta la evolucion de cada bomba desde su ficha.</p>
           </div>
           <div class="toolbar">
-            <input id="measureFile" type="file" accept=".csv,.xlsx,.xls,.xlsm" hidden />
-            <button class="button secondary" id="importMeasures">Importar Excel/CSV</button>
+            <input id="measureFile" type="file" accept=".xlsx,.xls,.xlsm" hidden />
+            <button class="button secondary" id="importMeasures">Importar Excel</button>
             <button class="button secondary" id="downloadHistory">Descargar Excel maestro</button>
             <button class="button secondary" id="resetHistory">Resetear historial</button>
-            <button class="button secondary" id="loadSharedTop">Cargar memoria</button>
             <button class="button secondary" id="configureFlow">Configurar SharePoint</button>
             <button class="button" id="addPump">+ Nueva bomba</button>
           </div>
@@ -391,6 +391,7 @@ function render() {
       </main>
     </div>
     ${renderDeleteModal()}
+    ${renderResetPumpModal()}
     ${renderResetHistoryModal()}
     ${renderFlowConfigModal()}
     <div class="toast" id="toast"></div>
@@ -489,6 +490,7 @@ function renderDetail(pump) {
         </div>
         <div class="detail-actions">
           <button class="button danger" type="button" id="deletePump">Eliminar bomba</button>
+          <button class="button secondary" type="button" id="resetPump">Resetear bomba</button>
           <button class="button" type="submit">Guardar</button>
         </div>
       </form>
@@ -688,6 +690,27 @@ function renderDeleteModal() {
   `;
 }
 
+function renderResetPumpModal() {
+  if (!state.pendingPumpResetId) return "";
+
+  const pump = state.pumps.find((item) => item.id === state.pendingPumpResetId);
+  if (!pump) return "";
+
+  return `
+    <div class="modal-backdrop" role="presentation">
+      <section class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="resetPumpTitle">
+        <p class="eyebrow">Confirmacion</p>
+        <h3 id="resetPumpTitle">¿Estás seguro de resetear esta bomba?</h3>
+        <p>Se borraran las medidas y el historial de vibraciones de <strong>${escapeHtml(pump.code)}</strong>. La bomba, avisos, alarmas e incidencias se conservaran.</p>
+        <div class="modal-actions">
+          <button class="button secondary" type="button" id="cancelResetPump">Cancelar</button>
+          <button class="button danger" type="button" id="confirmResetPump">Resetear bomba</button>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
 function renderResetHistoryModal() {
   if (!state.pendingHistoryReset) return "";
 
@@ -800,8 +823,11 @@ function bindEvents() {
 
   document.querySelector("#addPump")?.addEventListener("click", addPump);
   document.querySelector("#deletePump")?.addEventListener("click", requestDeleteSelectedPump);
+  document.querySelector("#resetPump")?.addEventListener("click", requestResetSelectedPump);
   document.querySelector("#cancelDelete")?.addEventListener("click", cancelDeletePump);
   document.querySelector("#confirmDelete")?.addEventListener("click", confirmDeletePump);
+  document.querySelector("#cancelResetPump")?.addEventListener("click", cancelResetPump);
+  document.querySelector("#confirmResetPump")?.addEventListener("click", confirmResetPump);
   document.querySelector("#resetHistory")?.addEventListener("click", requestResetHistory);
   document.querySelector("#cancelResetHistory")?.addEventListener("click", cancelResetHistory);
   document.querySelector("#confirmResetHistory")?.addEventListener("click", confirmResetHistory);
@@ -810,7 +836,6 @@ function bindEvents() {
   document.querySelector("#importMeasures")?.addEventListener("click", () => document.querySelector("#measureFile")?.click());
   document.querySelector("#measureFile")?.addEventListener("change", importMeasurements);
   document.querySelector("#downloadHistory")?.addEventListener("click", downloadHistoryExcel);
-  document.querySelector("#loadSharedTop")?.addEventListener("click", loadSharedDataManually);
   document.querySelector("#configureFlow")?.addEventListener("click", openFlowConfig);
   document.querySelector("#cancelFlowConfig")?.addEventListener("click", closeFlowConfig);
   document.querySelector("#closeFlowConfig")?.addEventListener("click", closeFlowConfig);
@@ -1712,13 +1737,56 @@ function cancelDeletePump() {
 function confirmDeletePump() {
   if (!state.pendingDeleteId) return;
 
+  const pump = state.pumps.find((item) => item.id === state.pendingDeleteId);
   state.pumps = state.pumps.filter((item) => item.id !== state.pendingDeleteId);
+  if (pump) {
+    state.viewDataBlocks = state.viewDataBlocks.filter((block) => !blockMatchesPumpCode(block, pump.code));
+  }
   state.pendingDeleteId = null;
   state.selectedId = state.pumps[0]?.id ?? null;
   savePumps();
+  saveViewDataBlocks();
   syncSharedData();
   render();
   showToast("Bomba eliminada.");
+}
+
+function requestResetSelectedPump() {
+  const pump = selectedPump();
+  if (!pump) return;
+
+  state.pendingPumpResetId = pump.id;
+  render();
+}
+
+function cancelResetPump() {
+  state.pendingPumpResetId = null;
+  render();
+}
+
+function confirmResetPump() {
+  if (!state.pendingPumpResetId) return;
+
+  const pump = state.pumps.find((item) => item.id === state.pendingPumpResetId);
+  if (!pump) return;
+
+  state.pumps = state.pumps.map((item) =>
+    item.id === pump.id ? { ...item, measurements: [] } : item,
+  );
+  state.viewDataBlocks = state.viewDataBlocks.filter((block) => !blockMatchesPumpCode(block, pump.code));
+  state.pendingPumpResetId = null;
+  state.selectedId = pump.id;
+  state.importMessage = `Historial de ${pump.code} reseteado.`;
+  savePumps();
+  saveViewDataBlocks();
+  syncSharedData();
+  render();
+  showToast("Bomba reseteada.");
+}
+
+function blockMatchesPumpCode(block, code) {
+  const machineCode = String(block?.machineName ?? "").split("/")[0].trim().toLowerCase();
+  return machineCode === String(code ?? "").trim().toLowerCase();
 }
 
 function requestResetHistory() {
