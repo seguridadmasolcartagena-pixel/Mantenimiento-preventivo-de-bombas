@@ -669,8 +669,9 @@ function renderFlowConfigModal() {
   if (!state.showFlowConfig) return "";
 
   return `
-    <div class="modal-backdrop" role="presentation">
+    <div class="modal-backdrop" role="presentation" data-close-modal="flowConfig">
       <section class="confirm-modal flow-modal" role="dialog" aria-modal="true" aria-labelledby="flowTitle">
+        <button class="modal-close" type="button" id="closeFlowConfig" aria-label="Cerrar configuracion">x</button>
         <p class="eyebrow">SharePoint</p>
         <h3 id="flowTitle">Configurar flujo de Power Automate</h3>
         <p>Pega las URL de los disparadores HTTP. La app puede subir el Excel maestro y sincronizar automaticamente los datos compartidos.</p>
@@ -772,11 +773,19 @@ function bindEvents() {
   document.querySelector("#loadSharedTop")?.addEventListener("click", loadSharedDataManually);
   document.querySelector("#configureFlow")?.addEventListener("click", openFlowConfig);
   document.querySelector("#cancelFlowConfig")?.addEventListener("click", closeFlowConfig);
+  document.querySelector("#closeFlowConfig")?.addEventListener("click", closeFlowConfig);
+  document.querySelector("[data-close-modal='flowConfig']")?.addEventListener("click", (event) => {
+    if (event.target === event.currentTarget) closeFlowConfig();
+  });
   document.querySelector("#flowConfigForm")?.addEventListener("submit", saveFlowConfig);
   document.querySelector("#loadSharedNow")?.addEventListener("click", loadSharedDataManually);
   document.querySelector("#importMemoryJson")?.addEventListener("click", () => document.querySelector("#memoryJsonFile")?.click());
   document.querySelector("#memoryJsonFile")?.addEventListener("change", importMemoryJsonFile);
 }
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && state.showFlowConfig) closeFlowConfig();
+});
 
 function addPump() {
   const nextNumber = state.pumps.length + 1;
