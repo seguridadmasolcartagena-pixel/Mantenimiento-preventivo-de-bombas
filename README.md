@@ -12,7 +12,7 @@ Aplicacion web estatica para consultar el historial de vibraciones e incidencias
 - Historial de medidas por bomba.
 - Registro manual de incidencias por operario.
 - Eliminacion de bombas con confirmacion previa.
-- Reseteo del historial de una bomba con confirmacion previa.
+- Reseteo de las medidas activas de una bomba con confirmacion previa, conservando el historico maestro.
 
 ## Uso
 
@@ -89,7 +89,9 @@ La memoria contiene:
 - incidencias
 - bloques `viewdata` usados para reconstruir el Excel historico
 
-Para recuperar datos desde SharePoint, usa el boton `Cargar memoria`. Si Power Automate no devuelve bien el JSON, descarga `memoria_bombas.json` desde SharePoint y usa `Configurar SharePoint > Importar memoria JSON`.
+Cuando se resetea una bomba, se limpian sus medidas activas en pantalla para iniciar una nueva etapa tras reparacion o intervencion. Los bloques `viewdata` se conservan para que el Excel maestro mantenga el historial y permita investigar tendencias.
+
+Para recuperar datos desde SharePoint, si Power Automate no devuelve bien el JSON, descarga `memoria_bombas.json` desde SharePoint y usa `Configurar SharePoint > Importar memoria JSON`.
 
 Al guardar la configuracion de SharePoint, la app ya no envia automaticamente la memoria local. Esto evita sobrescribir SharePoint con una pantalla vacia por error.
 
