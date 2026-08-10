@@ -12,6 +12,14 @@
   }
 
   function selectedPumpCode() {
+    const modalCode = document
+      .querySelector("#resetPumpTitle")
+      ?.closest(".confirm-modal")
+      ?.querySelector("p strong")
+      ?.textContent
+      ?.trim();
+    if (modalCode) return modalCode;
+
     const detailTitle = document.querySelector("#pumpDetail .panel-header h3")?.textContent || "";
     return detailTitle.split("·")[0]?.trim() || "";
   }
@@ -33,8 +41,8 @@
     }).catch(() => undefined);
   }
 
-  async function resetPumpWithoutModal(event) {
-    const button = event.target?.closest?.("#resetPump");
+  async function confirmResetWithoutDeletingHistory(event) {
+    const button = event.target?.closest?.("#confirmResetPump");
     if (!button) return;
 
     event.preventDefault();
@@ -43,11 +51,6 @@
 
     const code = selectedPumpCode();
     if (!code) return;
-
-    const confirmed = window.confirm(
-      `Estas seguro de resetear ${code}? Se limpiaran sus medidas activas, pero el historial maestro se conservara.`,
-    );
-    if (!confirmed) return;
 
     const pumps = parseJson(localStorage.getItem(PUMPS_KEY), []);
     const viewDataBlocks = parseJson(localStorage.getItem(VIEWDATA_KEY), []);
@@ -64,5 +67,5 @@
     window.location.reload();
   }
 
-  document.addEventListener("click", resetPumpWithoutModal, true);
+  document.addEventListener("click", confirmResetWithoutDeletingHistory, true);
 })();
