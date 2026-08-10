@@ -2,6 +2,8 @@
   const PUMPS_KEY = "gestor-bombas-v3";
   const VIEWDATA_KEY = "gestor-bombas-viewdata-v1";
   const SAVE_FLOW_KEY = "gestor-bombas-config-save-flow-url";
+  const LOAD_FLOW_KEY = "gestor-bombas-config-load-flow-url";
+  const LOCAL_RESET_PAYLOAD_KEY = "gestor-bombas-reset-local-payload";
 
   function parseJson(value, fallback) {
     try {
@@ -41,6 +43,38 @@
     }).catch(() => undefined);
   }
 
+  function sharedPayload(pumps, viewDataBlocks) {
+    return {
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      source: "App mantenimiento preventivo de bombas",
+      pumps,
+      viewDataBlocks,
+    };
+  }
+
+  function installLoadGuard() {
+    if (window.__bombasResetLoadGuard || !window.fetch) return;
+
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (resource, options = {}) => {
+      const loadUrl = localStorage.getItem(LOAD_FLOW_KEY);
+      const url = typeof resource === "string" ? resource : resource?.url;
+      const payload = sessionStorage.getItem(LOCAL_RESET_PAYLOAD_KEY);
+
+      if (payload && loadUrl && url === loadUrl) {
+        sessionStorage.removeItem(LOCAL_RESET_PAYLOAD_KEY);
+        return Promise.resolve(new Response(payload, {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }));
+      }
+
+      return originalFetch(resource, options);
+    };
+    window.__bombasResetLoadGuard = true;
+  }
+
   async function confirmResetWithoutDeletingHistory(event) {
     const button = event.target?.closest?.("#confirmResetPump");
     if (!button) return;
@@ -63,9 +97,11 @@
 
     localStorage.setItem(PUMPS_KEY, JSON.stringify(updatedPumps));
     localStorage.setItem(VIEWDATA_KEY, JSON.stringify(viewDataBlocks));
+    sessionStorage.setItem(LOCAL_RESET_PAYLOAD_KEY, JSON.stringify(sharedPayload(updatedPumps, viewDataBlocks)));
     await syncSharedData(updatedPumps, viewDataBlocks);
     window.location.reload();
   }
 
+  installLoadGuard();
   document.addEventListener("click", confirmResetWithoutDeletingHistory, true);
 })();
