@@ -10,6 +10,7 @@ Aplicacion web estatica para consultar el historial de vibraciones e incidencias
 - Grafica de evolucion de vibracion.
 - Cuatro puntos de medida fijos por bomba: `B-LA`, `B-LOA`, `M-LA`, `M-LOA`.
 - Historial de medidas por bomba.
+- Registro de mantenimientos por bomba con fecha, tipo, responsable y marcador visible en la grafica de vibracion.
 - Registro manual de incidencias por operario.
 - Eliminacion de bombas con confirmacion previa.
 - Reseteo de las medidas activas de una bomba con confirmacion previa, conservando el historico maestro.
@@ -91,7 +92,11 @@ La memoria contiene:
 
 Cuando se resetea una bomba, se limpian sus medidas activas en pantalla para iniciar una nueva etapa tras reparacion o intervencion. Los bloques `viewdata` se conservan para que el Excel maestro mantenga el historial y permita investigar tendencias.
 
-Para recuperar datos desde SharePoint, si Power Automate no devuelve bien el JSON, descarga `memoria_bombas.json` desde SharePoint y usa `Configurar SharePoint > Importar memoria JSON`.
+El reseteo actualiza primero la memoria local y la pantalla. La sincronizacion con SharePoint se realiza despues, de modo que una respuesta lenta del flujo no impide limpiar las medidas visibles.
+
+Para recuperar datos desde SharePoint, usa el boton `Cargar memoria`. Si Power Automate no devuelve bien el JSON, descarga `memoria_bombas.json` desde SharePoint y usa `Configurar SharePoint > Importar memoria JSON`.
+
+Al abrir o recargar la aplicacion, se compara `updatedAt` de SharePoint con la fecha de la memoria local. La version mas reciente prevalece; la carga manual desde SharePoint sigue reemplazando la memoria local cuando el usuario la solicita expresamente.
 
 Al guardar la configuracion de SharePoint, la app ya no envia automaticamente la memoria local. Esto evita sobrescribir SharePoint con una pantalla vacia por error.
 
