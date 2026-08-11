@@ -1,5 +1,6 @@
 const STORAGE_KEY = "gestor-bombas-v3";
 const VIEWDATA_STORAGE_KEY = "gestor-bombas-viewdata-v1";
+const LOCAL_UPDATED_AT_KEY = "gestor-bombas-local-updated-at-v1";
 const SHAREPOINT_FLOW_URL_KEY = "gestor-bombas-sharepoint-flow-url";
 const SHAREPOINT_CONFIG_SAVE_URL_KEY = "gestor-bombas-config-save-flow-url";
 const SHAREPOINT_CONFIG_LOAD_URL_KEY = "gestor-bombas-config-load-flow-url";
@@ -135,6 +136,7 @@ const state = {
   filter: "Todas",
   pendingDeleteId: null,
   pendingPumpResetId: null,
+  maintenancePumpId: null,
   pendingHistoryReset: false,
   showFlowConfig: false,
   sharePointFlowUrl: loadSharePointFlowUrl(),
@@ -147,13 +149,17 @@ const app = document.querySelector("#app");
 
 function loadPumps() {
   const saved = localStorage.getItem(STORAGE_KEY);
-  if (!saved) return demoPumps;
+  if (!saved) return demoPumps.map(normalizePump);
+
+  if (!localStorage.getItem(LOCAL_UPDATED_AT_KEY)) {
+    localStorage.setItem(LOCAL_UPDATED_AT_KEY, new Date().toISOString());
+  }
 
   try {
     const parsed = JSON.parse(saved);
-    return Array.isArray(parsed) ? parsed.map(normalizePump) : demoPumps;
+    return Array.isArray(parsed) ? parsed.map(normalizePump) : demoPumps.map(normalizePump);
   } catch {
-    return demoPumps;
+    return demoPumps.map(normalizePump);
   }
 }
 
@@ -167,6 +173,7 @@ function normalizePump(pump) {
     alarma: pump.alarma ?? "",
     status: normalizeStatus(pump.status),
     measurements: Array.isArray(pump.measurements) ? pump.measurements.map(normalizeMeasurement) : [],
+    maintenanceEvents: Array.isArray(pump.maintenanceEvents) ? pump.maintenanceEvents.map(normalizeMaintenanceEvent) : [],
     incidents: Array.isArray(pump.incidents) ? pump.incidents : [],
   };
 }
@@ -183,8 +190,23 @@ function normalizeMeasurement(item) {
   };
 }
 
-function savePumps() {
+function normalizeMaintenanceEvent(item) {
+  return {
+    id: item.id ?? crypto.randomUUID(),
+    date: item.date ?? "",
+    type: item.type || "Preventivo",
+    technician: item.technician || "",
+    description: item.description || "",
+  };
+}
+
+function markLocalDataUpdated() {
+  localStorage.setItem(LOCAL_UPDATED_AT_KEY, new Date().toISOString());
+}
+
+function savePumps({ markUpdated = true } = {}) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state.pumps));
+  if (markUpdated) markLocalDataUpdated();
 }
 
 function loadViewDataBlocks() {
@@ -199,8 +221,9 @@ function loadViewDataBlocks() {
   }
 }
 
-function saveViewDataBlocks() {
+function saveViewDataBlocks({ markUpdated = true } = {}) {
   localStorage.setItem(VIEWDATA_STORAGE_KEY, JSON.stringify(state.viewDataBlocks));
+  if (markUpdated) markLocalDataUpdated();
 }
 
 function loadSharePointFlowUrl() {
@@ -298,6 +321,47 @@ function calculatedPumpStatus(pump) {
   return "Operativa";
 }
 
+function pumpAlert(pump) {
+  const status = calculatedPumpStatus(pump);
+  if (status !== "Aviso" && status !== "Alarma") return null;
+
+  const latestByPoint = latestMeasurementsByPoint(pump);
+  const warningThreshold = parseThreshold(pump.aviso);
+  const alarmThreshold = parseThreshold(pump.alarma);
+  const triggeredPoints = MEASUREMENT_POINTS.map((point) => {
+    const item = latestByPoint[point];
+    const value = Number(item?.vibration);
+    if (!item || !Number.isFinite(value)) return null;
+
+    if (alarmThreshold !== null && value > alarmThreshold) {
+      return { point, value, unit: item.unit, date: item.date, thresholdType: "Alarma", threshold: alarmThreshold };
+    }
+    if (warningThreshold !== null && value > warningThreshold) {
+      return { point, value, unit: item.unit, date: item.date, thresholdType: "Aviso", threshold: warningThreshold };
+    }
+    return null;
+  }).filter(Boolean);
+
+  if (!triggeredPoints.length) return null;
+
+  return {
+    id: pump.id,
+    code: pump.code,
+    name: pump.name,
+    area: pump.area,
+    status,
+    aviso: pump.aviso ?? "",
+    alarma: pump.alarma ?? "",
+    triggeredPoints,
+    highestValue: Math.max(...triggeredPoints.map((item) => Number(item.value))),
+    latestDate: triggeredPoints.map((item) => item.date).sort().at(-1) || "",
+  };
+}
+
+function currentAlerts() {
+  return state.pumps.map(pumpAlert).filter(Boolean);
+}
+
 function statusClass(status) {
   if (status === "Operativa") return "ok";
   if (status === "Aviso") return "warn";
@@ -392,6 +456,7 @@ function render() {
     </div>
     ${renderDeleteModal()}
     ${renderResetPumpModal()}
+    ${renderMaintenanceModal()}
     ${renderResetHistoryModal()}
     ${renderFlowConfigModal()}
     <div class="toast" id="toast"></div>
@@ -417,6 +482,7 @@ function renderPumpRow(pump) {
           <span class="tag ${status}">${escapeHtml(pumpStatus)}</span>
           <span class="tag">${latest ? `${latest.vibration} ${latest.unit}` : "sin medidas"}</span>
           <span class="tag">${pump.incidents.length} incid.</span>
+          <span class="tag">${pump.maintenanceEvents.length} mant.</span>
         </div>
       </div>
       <span class="status-dot ${status}" aria-hidden="true"></span>
@@ -497,10 +563,21 @@ function renderDetail(pump) {
 
       <section class="history-section">
         <div class="section-heading">
-          <h4>Grafica de vibracion</h4>
-          <span>B-LA · B-LOA · M-LA · M-LOA</span>
+          <div>
+            <h4>Grafica de vibracion</h4>
+            <span>B-LA · B-LOA · M-LA · M-LOA</span>
+          </div>
+          <button class="button secondary button-small" type="button" id="registerMaintenance">Registrar mantenimiento</button>
         </div>
         ${renderChart(pump)}
+      </section>
+
+      <section class="history-section">
+        <div class="section-heading">
+          <h4>Mantenimientos</h4>
+          <span>${pump.maintenanceEvents.length} registrados</span>
+        </div>
+        ${renderMaintenanceEvents(pump.maintenanceEvents)}
       </section>
 
       <section class="history-section">
@@ -538,15 +615,22 @@ function renderChart(pump) {
     .map(normalizeMeasurement)
     .filter((item) => MEASUREMENT_POINTS.includes(item.point))
     .sort((a, b) => a.date.localeCompare(b.date));
-  if (!items.length) {
+  const maintenanceEvents = [...pump.maintenanceEvents]
+    .map(normalizeMaintenanceEvent)
+    .filter((item) => item.date)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (!items.length && !maintenanceEvents.length) {
     return `<div class="empty-inline">Todavia no hay medidas para graficar.</div>`;
   }
 
   const width = 680;
   const height = 270;
   const pad = 34;
-  const dates = [...new Set(items.map((item) => item.date))].slice(-10);
+  const dates = [...new Set([...items.map((item) => item.date), ...maintenanceEvents.map((item) => item.date)])]
+    .sort()
+    .slice(-10);
   const visibleItems = items.filter((item) => dates.includes(item.date));
+  const visibleMaintenance = maintenanceEvents.filter((item) => dates.includes(item.date));
   const thresholds = [
     { key: "aviso", label: "Aviso", value: parseThreshold(pump.aviso), color: "#d97706" },
     { key: "alarma", label: "Alarma", value: parseThreshold(pump.alarma), color: "#b42318" },
@@ -558,6 +642,7 @@ function renderChart(pump) {
   };
   const yForValue = (value) => height - pad - (Number(value) / maxValue) * (height - pad * 2);
   const thresholdLines = thresholds.map((threshold) => ({ ...threshold, y: yForValue(threshold.value) }));
+  const maintenanceMarkers = visibleMaintenance.map((item) => ({ ...item, x: xForDate(item.date) }));
 
   const series = MEASUREMENT_POINTS.map((point) => {
     const pointItems = visibleItems.filter((item) => item.point === point);
@@ -570,6 +655,18 @@ function renderChart(pump) {
     <svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Grafica de vibracion">
       <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" />
       <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}" />
+      ${maintenanceMarkers
+        .map(
+          (event) => `
+            <g class="maintenance-marker">
+              <title>${escapeHtml(`${formatDate(event.date)} · ${event.type} · ${event.description || "Sin descripcion"}`)}</title>
+              <line x1="${event.x.toFixed(1)}" y1="${pad}" x2="${event.x.toFixed(1)}" y2="${height - pad}" />
+              <rect x="${(event.x - 8).toFixed(1)}" y="${pad + 4}" width="16" height="16" rx="3" />
+              <text x="${event.x.toFixed(1)}" y="${pad + 16}" text-anchor="middle">M</text>
+            </g>
+          `,
+        )
+        .join("")}
       ${thresholdLines
         .map(
           (threshold, index) => `
@@ -608,9 +705,36 @@ function renderChart(pump) {
           `,
         )
         .join("")}
+      <g class="chart-legend maintenance-legend">
+        <rect x="506" y="12" width="10" height="10" rx="2" />
+        <text x="522" y="22">Mantenimiento</text>
+      </g>
       <text x="${pad}" y="${height - 8}">${escapeHtml(dates[0])}</text>
       <text x="${width - pad}" y="${height - 8}" text-anchor="end">${escapeHtml(dates.at(-1))}</text>
     </svg>
+  `;
+}
+
+function renderMaintenanceEvents(events) {
+  const rows = [...events].map(normalizeMaintenanceEvent).sort((a, b) => b.date.localeCompare(a.date));
+  if (!rows.length) return `<div class="empty-inline">No hay mantenimientos registrados.</div>`;
+
+  return `
+    <div class="maintenance-list">
+      ${rows
+        .map(
+          (item) => `
+            <article class="maintenance-event">
+              <div class="maintenance-date"><strong>${formatDate(item.date)}</strong><span>${escapeHtml(item.type)}</span></div>
+              <div>
+                <strong>${escapeHtml(item.description || "Mantenimiento registrado")}</strong>
+                <p>${item.technician ? `Realizado por ${escapeHtml(item.technician)}` : "Responsable no indicado"}</p>
+              </div>
+            </article>
+          `,
+        )
+        .join("")}
+    </div>
   `;
 }
 
@@ -680,7 +804,7 @@ function renderDeleteModal() {
       <section class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="deleteTitle">
         <p class="eyebrow">Confirmacion</p>
         <h3 id="deleteTitle">¿Estás seguro de eliminar esta bomba?</h3>
-        <p>Se eliminara <strong>${escapeHtml(pump.code)}</strong> junto con su historial de medidas e incidencias guardadas en esta aplicacion.</p>
+        <p>Se eliminara <strong>${escapeHtml(pump.code)}</strong> junto con sus medidas, mantenimientos e incidencias guardadas en esta aplicacion.</p>
         <div class="modal-actions">
           <button class="button secondary" type="button" id="cancelDelete">Cancelar</button>
           <button class="button danger" type="button" id="confirmDelete">Eliminar bomba</button>
@@ -701,11 +825,55 @@ function renderResetPumpModal() {
       <section class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="resetPumpTitle">
         <p class="eyebrow">Confirmacion</p>
         <h3 id="resetPumpTitle">¿Estás seguro de resetear esta bomba?</h3>
-        <p>Se borraran las medidas y el historial de vibraciones de <strong>${escapeHtml(pump.code)}</strong>. La bomba, avisos, alarmas e incidencias se conservaran.</p>
+        <p>Se limpiaran las medidas activas de <strong>${escapeHtml(pump.code)}</strong> para iniciar una nueva etapa de seguimiento. El historial maestro importado se conservara para analisis de tendencias.</p>
         <div class="modal-actions">
           <button class="button secondary" type="button" id="cancelResetPump">Cancelar</button>
           <button class="button danger" type="button" id="confirmResetPump">Resetear bomba</button>
         </div>
+      </section>
+    </div>
+  `;
+}
+
+function renderMaintenanceModal() {
+  if (!state.maintenancePumpId) return "";
+
+  const pump = state.pumps.find((item) => item.id === state.maintenancePumpId);
+  if (!pump) return "";
+
+  return `
+    <div class="modal-backdrop" role="presentation">
+      <section class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="maintenanceTitle">
+        <p class="eyebrow">Intervencion</p>
+        <h3 id="maintenanceTitle">Registrar mantenimiento</h3>
+        <p>El mantenimiento de <strong>${escapeHtml(pump.code)}</strong> quedara señalado en la grafica de vibracion.</p>
+        <form id="maintenanceForm" class="maintenance-form">
+          <label>
+            Fecha
+            <input class="field" name="date" type="date" value="${new Date().toISOString().slice(0, 10)}" required />
+          </label>
+          <label>
+            Tipo
+            <select class="field" name="type">
+              <option>Preventivo</option>
+              <option>Correctivo</option>
+              <option>Inspeccion</option>
+              <option>Otro</option>
+            </select>
+          </label>
+          <label class="full">
+            Realizado por
+            <input class="field" name="technician" placeholder="Nombre o empresa (opcional)" />
+          </label>
+          <label class="full">
+            Trabajo realizado
+            <textarea class="field" name="description" placeholder="Describe brevemente la intervencion" required></textarea>
+          </label>
+          <div class="modal-actions full">
+            <button class="button secondary" type="button" id="cancelMaintenance">Cancelar</button>
+            <button class="button" type="submit">Registrar mantenimiento</button>
+          </div>
+        </form>
       </section>
     </div>
   `;
@@ -719,7 +887,7 @@ function renderResetHistoryModal() {
       <section class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="resetHistoryTitle">
         <p class="eyebrow">Confirmacion</p>
         <h3 id="resetHistoryTitle">¿Estás seguro de resetear el historial?</h3>
-        <p>Se borraran las medidas importadas y el historial de vibraciones guardado en esta aplicacion. Las bombas, avisos, alarmas e incidencias se conservaran.</p>
+        <p>Se borraran las medidas importadas y el historial de vibraciones guardado en esta aplicacion. Las bombas, avisos, alarmas, mantenimientos e incidencias se conservaran.</p>
         <div class="modal-actions">
           <button class="button secondary" type="button" id="cancelResetHistory">Cancelar</button>
           <button class="button danger" type="button" id="confirmResetHistory">Resetear historial</button>
@@ -824,10 +992,13 @@ function bindEvents() {
   document.querySelector("#addPump")?.addEventListener("click", addPump);
   document.querySelector("#deletePump")?.addEventListener("click", requestDeleteSelectedPump);
   document.querySelector("#resetPump")?.addEventListener("click", requestResetSelectedPump);
+  document.querySelector("#registerMaintenance")?.addEventListener("click", requestMaintenance);
   document.querySelector("#cancelDelete")?.addEventListener("click", cancelDeletePump);
   document.querySelector("#confirmDelete")?.addEventListener("click", confirmDeletePump);
   document.querySelector("#cancelResetPump")?.addEventListener("click", cancelResetPump);
   document.querySelector("#confirmResetPump")?.addEventListener("click", confirmResetPump);
+  document.querySelector("#cancelMaintenance")?.addEventListener("click", cancelMaintenance);
+  document.querySelector("#maintenanceForm")?.addEventListener("submit", addMaintenance);
   document.querySelector("#resetHistory")?.addEventListener("click", requestResetHistory);
   document.querySelector("#cancelResetHistory")?.addEventListener("click", cancelResetHistory);
   document.querySelector("#confirmResetHistory")?.addEventListener("click", confirmResetHistory);
@@ -871,6 +1042,7 @@ function addPump() {
     alarma: "",
     status: "Operativa",
     measurements: [],
+    maintenanceEvents: [],
     incidents: [],
   };
 
@@ -929,6 +1101,45 @@ function addIncident(event) {
   syncSharedData();
   render();
   showToast("Incidencia añadida.");
+}
+
+function requestMaintenance() {
+  const pump = selectedPump();
+  if (!pump) return;
+
+  state.maintenancePumpId = pump.id;
+  render();
+}
+
+function cancelMaintenance() {
+  state.maintenancePumpId = null;
+  render();
+}
+
+function addMaintenance(event) {
+  event.preventDefault();
+
+  const pump = state.pumps.find((item) => item.id === state.maintenancePumpId);
+  if (!pump) return;
+
+  const form = new FormData(event.target);
+  const maintenance = normalizeMaintenanceEvent({
+    id: crypto.randomUUID(),
+    date: String(form.get("date") ?? new Date().toISOString().slice(0, 10)),
+    type: String(form.get("type") ?? "Preventivo"),
+    technician: String(form.get("technician") ?? "").trim(),
+    description: String(form.get("description") ?? "").trim(),
+  });
+
+  state.pumps = state.pumps.map((item) =>
+    item.id === pump.id ? { ...item, maintenanceEvents: [maintenance, ...item.maintenanceEvents] } : item,
+  );
+  state.maintenancePumpId = null;
+  state.selectedId = pump.id;
+  savePumps();
+  void syncSharedData();
+  render();
+  showToast("Mantenimiento registrado.");
 }
 
 function openFlowConfig() {
@@ -1356,17 +1567,19 @@ async function updateSharePointExcel() {
 }
 
 function sharedDataPayload() {
+  const updatedAt = localStorage.getItem(LOCAL_UPDATED_AT_KEY) || new Date().toISOString();
   return {
     version: 1,
-    updatedAt: new Date().toISOString(),
+    updatedAt,
     source: "App mantenimiento preventivo de bombas",
     pumps: state.pumps,
     viewDataBlocks: state.viewDataBlocks,
+    alerts: currentAlerts(),
   };
 }
 
 async function syncSharedData() {
-  if (!state.configSaveFlowUrl) return;
+  if (!state.configSaveFlowUrl) return false;
 
   try {
     const response = await fetch(state.configSaveFlowUrl, {
@@ -1376,8 +1589,10 @@ async function syncSharedData() {
     });
 
     if (!response.ok) throw new Error(`Codigo ${response.status}`);
+    return true;
   } catch (error) {
     console.warn("No se pudo sincronizar la configuracion compartida.", error);
+    return false;
   }
 }
 
@@ -1421,9 +1636,16 @@ async function loadSharedDataFromSharePoint({ manual = false } = {}) {
     const responseText = await response.text();
     const sharedData = parseSharedDataPayload(responseText);
     const remotePumpCount = sharedData.pumps.length;
+    const localUpdatedAt = localStorage.getItem(LOCAL_UPDATED_AT_KEY);
 
     if (!manual && state.pumps.length && !remotePumpCount) {
       state.importMessage = "SharePoint devolvio una memoria vacia. Se conservaron los datos locales.";
+      return false;
+    }
+
+    if (!manual && localUpdatedAt && isNewerTimestamp(localUpdatedAt, sharedData.updatedAt)) {
+      state.importMessage = "Se conservaron los cambios locales porque son mas recientes que la memoria de SharePoint.";
+      void syncSharedData();
       return false;
     }
 
@@ -1461,7 +1683,16 @@ function parseSharedDataPayload(payload) {
   return {
     pumps: data.pumps,
     viewDataBlocks: Array.isArray(data.viewDataBlocks) ? data.viewDataBlocks : [],
+    updatedAt: typeof data.updatedAt === "string" ? data.updatedAt : "",
   };
+}
+
+function isNewerTimestamp(candidate, reference) {
+  const candidateTime = Date.parse(candidate);
+  const referenceTime = Date.parse(reference);
+  if (!Number.isFinite(candidateTime)) return false;
+  if (!Number.isFinite(referenceTime)) return true;
+  return candidateTime > referenceTime;
 }
 
 function decodeBase64Text(value) {
@@ -1475,8 +1706,9 @@ function applySharedData(sharedData) {
   state.viewDataBlocks = sharedData.viewDataBlocks;
   state.selectedId = state.pumps[0]?.id ?? null;
   state.filter = "Todas";
-  savePumps();
-  saveViewDataBlocks();
+  savePumps({ markUpdated: false });
+  saveViewDataBlocks({ markUpdated: false });
+  localStorage.setItem(LOCAL_UPDATED_AT_KEY, sharedData.updatedAt || new Date().toISOString());
 }
 
 function buildViewDataExportRows() {
@@ -1711,14 +1943,18 @@ function normalizeDate(value) {
 
   const raw = String(value ?? "").trim();
   if (!raw) return "";
+
+  const match = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/);
+  if (match) {
+    const [, day, month, year] = match;
+    const fullYear = year.length === 2 ? `20${year}` : year;
+    return `${fullYear}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+
   const direct = new Date(raw);
   if (!Number.isNaN(direct.getTime())) return direct.toISOString().slice(0, 10);
 
-  const match = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/);
-  if (!match) return raw;
-  const [, day, month, year] = match;
-  const fullYear = year.length === 2 ? `20${year}` : year;
-  return `${fullYear}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  return raw;
 }
 
 function requestDeleteSelectedPump() {
@@ -1773,15 +2009,13 @@ function confirmResetPump() {
   state.pumps = state.pumps.map((item) =>
     item.id === pump.id ? { ...item, measurements: [] } : item,
   );
-  state.viewDataBlocks = state.viewDataBlocks.filter((block) => !blockMatchesPumpCode(block, pump.code));
   state.pendingPumpResetId = null;
   state.selectedId = pump.id;
-  state.importMessage = `Historial de ${pump.code} reseteado.`;
+  state.importMessage = `Medidas activas de ${pump.code} reseteadas. El historial maestro se conserva.`;
   savePumps();
-  saveViewDataBlocks();
-  syncSharedData();
   render();
   showToast("Bomba reseteada.");
+  void syncSharedData();
 }
 
 function blockMatchesPumpCode(block, code) {
