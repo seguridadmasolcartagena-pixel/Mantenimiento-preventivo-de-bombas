@@ -4,9 +4,9 @@ const LOCAL_UPDATED_AT_KEY = "gestor-bombas-local-updated-at-v1";
 const SHAREPOINT_FLOW_URL_KEY = "gestor-bombas-sharepoint-flow-url";
 const SHAREPOINT_CONFIG_SAVE_URL_KEY = "gestor-bombas-config-save-flow-url";
 const SHAREPOINT_CONFIG_LOAD_URL_KEY = "gestor-bombas-config-load-flow-url";
-const DEFAULT_SHAREPOINT_FLOW_URL = "";
-const DEFAULT_CONFIG_SAVE_FLOW_URL = "";
-const DEFAULT_CONFIG_LOAD_FLOW_URL = "";
+const DEFAULT_SHAREPOINT_FLOW_URL = "https://default65afa47b9e4e4ad28cfe30d4118f06.2e.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/15/workflows/95bc65b247164e0a804736dc195482c9/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=8PRtUuxOM1R2WhMXrnYmkGHdTiIMxO8i7exY-jREaNY";
+const DEFAULT_CONFIG_SAVE_FLOW_URL = "https://default65afa47b9e4e4ad28cfe30d4118f06.2e.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/17/workflows/700af3db16a142d5a2799fc8d21c5d41/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=lua5kSvn1VtD5lRZgHNkv6e9zpkWd6oieNrbJMx6xO8";
+const DEFAULT_CONFIG_LOAD_FLOW_URL = "https://default65afa47b9e4e4ad28cfe30d4118f06.2e.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/29/workflows/d6a6f47846c4459c82242e000ac1c256/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=3sYKAXENMKBE6W-Mw8v59t_lryukYAWg2DtW-DFYPVQ";
 const FILTER_STATUSES = ["Todas", "Operativa", "Aviso", "Alarma", "Parada"];
 const MANUAL_STATUSES = ["Operativa", "Parada"];
 const MEASUREMENT_POINTS = ["B-LA", "B-LOA", "M-LA", "M-LOA"];
@@ -227,7 +227,7 @@ function saveViewDataBlocks({ markUpdated = true } = {}) {
 }
 
 function loadSharePointFlowUrl() {
-  return localStorage.getItem(SHAREPOINT_FLOW_URL_KEY) || DEFAULT_SHAREPOINT_FLOW_URL;
+  return DEFAULT_SHAREPOINT_FLOW_URL;
 }
 
 function saveSharePointFlowUrl(url) {
@@ -236,11 +236,11 @@ function saveSharePointFlowUrl(url) {
 }
 
 function loadConfigSaveFlowUrl() {
-  return localStorage.getItem(SHAREPOINT_CONFIG_SAVE_URL_KEY) || DEFAULT_CONFIG_SAVE_FLOW_URL;
+  return DEFAULT_CONFIG_SAVE_FLOW_URL;
 }
 
 function loadConfigLoadFlowUrl() {
-  return localStorage.getItem(SHAREPOINT_CONFIG_LOAD_URL_KEY) || DEFAULT_CONFIG_LOAD_FLOW_URL;
+  return DEFAULT_CONFIG_LOAD_FLOW_URL;
 }
 
 function saveConfigSyncUrls(saveUrl, loadUrl) {
@@ -415,7 +415,6 @@ function render() {
             <button class="button secondary" id="importMeasures">Importar Excel</button>
             <button class="button secondary" id="downloadHistory">Descargar Excel maestro</button>
             <button class="button secondary" id="resetHistory">Resetear historial</button>
-            <button class="button secondary" id="configureFlow">Configurar SharePoint</button>
             <button class="button" id="addPump">+ Nueva bomba</button>
           </div>
         </section>
@@ -458,7 +457,6 @@ function render() {
     ${renderResetPumpModal()}
     ${renderMaintenanceModal()}
     ${renderResetHistoryModal()}
-    ${renderFlowConfigModal()}
     <div class="toast" id="toast"></div>
   `;
 
@@ -1007,16 +1005,6 @@ function bindEvents() {
   document.querySelector("#importMeasures")?.addEventListener("click", () => document.querySelector("#measureFile")?.click());
   document.querySelector("#measureFile")?.addEventListener("change", importMeasurements);
   document.querySelector("#downloadHistory")?.addEventListener("click", downloadHistoryExcel);
-  document.querySelector("#configureFlow")?.addEventListener("click", openFlowConfig);
-  document.querySelector("#cancelFlowConfig")?.addEventListener("click", closeFlowConfig);
-  document.querySelector("#closeFlowConfig")?.addEventListener("click", closeFlowConfig);
-  document.querySelector("[data-close-modal='flowConfig']")?.addEventListener("click", (event) => {
-    if (event.target === event.currentTarget) closeFlowConfig();
-  });
-  document.querySelector("#flowConfigForm")?.addEventListener("submit", saveFlowConfig);
-  document.querySelector("#loadSharedNow")?.addEventListener("click", loadSharedDataManually);
-  document.querySelector("#importMemoryJson")?.addEventListener("click", () => document.querySelector("#memoryJsonFile")?.click());
-  document.querySelector("#memoryJsonFile")?.addEventListener("change", importMemoryJsonFile);
 }
 
 function selectPump(id) {
