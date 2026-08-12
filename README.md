@@ -78,10 +78,10 @@ Historico_Bombas_Fluke.xlsx
 
 ## Memoria compartida de la app
 
-La app puede guardar y cargar su memoria compartida desde SharePoint mediante dos flujos HTTP:
+La app guarda y carga su memoria compartida automaticamente desde SharePoint mediante dos flujos HTTP configurados en el codigo:
 
-- `URL para guardar datos compartidos`: recibe el JSON completo de memoria y actualiza `memoria_bombas.json`.
-- `URL para cargar datos compartidos`: devuelve el contenido de `memoria_bombas.json` a la app.
+- El flujo para guardar recibe el JSON completo de memoria y actualiza `memoria_bombas.json`.
+- El flujo para cargar devuelve el contenido de `memoria_bombas.json` a la app al abrirla.
 
 La memoria contiene:
 
