@@ -137,6 +137,8 @@ const state = {
   pendingDeleteId: null,
   pendingPumpResetId: null,
   maintenancePumpId: null,
+  pendingImportData: null,
+  frequencyBand: "all",
   pendingHistoryReset: false,
   showFlowConfig: false,
   sharePointFlowUrl: loadSharePointFlowUrl(),
@@ -171,6 +173,8 @@ function normalizePump(pump) {
     area: pump.area ?? "Sin asignar",
     aviso: pump.aviso ?? "",
     alarma: pump.alarma ?? "",
+    hasVfd: Boolean(pump.hasVfd),
+    lastFrequencyHz: parseOptionalNumber(pump.lastFrequencyHz),
     status: normalizeStatus(pump.status),
     measurements: Array.isArray(pump.measurements) ? pump.measurements.map(normalizeMeasurement) : [],
     maintenanceEvents: Array.isArray(pump.maintenanceEvents) ? pump.maintenanceEvents.map(normalizeMaintenanceEvent) : [],
@@ -185,6 +189,7 @@ function normalizeMeasurement(item) {
     dateTime: item.dateTime || item.date || "",
     point: normalizeMeasurementPoint(item.point),
     vibration: Number(item.vibration) || 0,
+    frequencyHz: parseOptionalNumber(item.frequencyHz),
     unit: item.unit || "mm/s",
     source: item.source || "Fluke 805 FC",
   };
@@ -456,6 +461,7 @@ function render() {
     ${renderDeleteModal()}
     ${renderResetPumpModal()}
     ${renderMaintenanceModal()}
+    ${renderImportConditionsModal()}
     ${renderResetHistoryModal()}
     <div class="toast" id="toast"></div>
   `;
@@ -481,6 +487,7 @@ function renderPumpRow(pump) {
           <span class="tag">${latest ? `${latest.vibration} ${latest.unit}` : "sin medidas"}</span>
           <span class="tag">${pump.incidents.length} incid.</span>
           <span class="tag">${pump.maintenanceEvents.length} mant.</span>
+          ${pump.hasVfd ? `<span class="tag">Variador</span>` : ""}
         </div>
       </div>
       <span class="status-dot ${status}" aria-hidden="true"></span>
@@ -549,6 +556,10 @@ function renderDetail(pump) {
               .join("")}
           </select>
         </label>
+        <label class="checkbox-field">
+          <input name="hasVfd" type="checkbox" ${pump.hasVfd ? "checked" : ""} />
+          <span>La bomba dispone de variador de frecuencia</span>
+        </label>
         <div class="status-explain">
           Estado actual: <strong>${escapeHtml(pumpStatus)}</strong>. Aviso y Alarma se calculan con las ultimas medidas de B-LA, B-LOA, M-LA y M-LOA.
         </div>
@@ -565,9 +576,20 @@ function renderDetail(pump) {
             <h4>Grafica de vibracion</h4>
             <span>B-LA · B-LOA · M-LA · M-LOA</span>
           </div>
-          <button class="button secondary button-small" type="button" id="registerMaintenance">Registrar mantenimiento</button>
+          <div class="chart-actions">
+            ${renderFrequencyFilter(pump)}
+            <button class="button secondary button-small" type="button" id="registerMaintenance">Registrar mantenimiento</button>
+          </div>
         </div>
-        ${renderChart(pump)}
+        ${renderChart(pump, state.frequencyBand)}
+      </section>
+
+      <section class="history-section">
+        <div class="section-heading">
+          <h4>Vibracion frente a frecuencia</h4>
+          <span>Comparacion de regimenes de operacion</span>
+        </div>
+        ${renderFrequencyChart(pump)}
       </section>
 
       <section class="history-section">
@@ -603,20 +625,62 @@ function renderPointSummary(point, item) {
     <div class="point-summary" style="--point-color: ${POINT_COLORS[point]}">
       <span>${point}</span>
       <strong>${item ? `${item.vibration} ${escapeHtml(item.unit)}` : "-"}</strong>
-      <small>${item ? formatDate(item.date) : "sin medida"}</small>
+      <small>${item ? `${formatDate(item.date)} · ${item.frequencyHz === null ? "sin Hz" : `${item.frequencyHz} Hz`}` : "sin medida"}</small>
     </div>
   `;
 }
 
-function renderChart(pump) {
-  const items = [...pump.measurements]
+function frequencyBandKey(value) {
+  const frequency = parseOptionalNumber(value);
+  if (frequency === null) return "unknown";
+  const start = Math.floor(frequency / 5) * 5;
+  return `${start}-${start + 5}`;
+}
+
+function frequencyBands(pump) {
+  const bands = new Set(
+    pump.measurements
+      .map((item) => frequencyBandKey(item.frequencyHz))
+      .filter((band) => band !== "unknown"),
+  );
+  return [...bands].sort((a, b) => Number(a.split("-")[0]) - Number(b.split("-")[0]));
+}
+
+function renderFrequencyFilter(pump) {
+  const bands = frequencyBands(pump);
+  const hasUnknown = pump.measurements.some((item) => parseOptionalNumber(item.frequencyHz) === null);
+  if (!bands.length && !hasUnknown) return "";
+
+  return `
+    <label class="frequency-filter">
+      <span>Frecuencia</span>
+      <select class="field" id="frequencyFilter">
+        <option value="all" ${state.frequencyBand === "all" ? "selected" : ""}>Todas</option>
+        ${bands
+          .map((band) => {
+            const [start, end] = band.split("-");
+            return `<option value="${band}" ${state.frequencyBand === band ? "selected" : ""}>${start}–${end} Hz</option>`;
+          })
+          .join("")}
+        ${hasUnknown ? `<option value="unknown" ${state.frequencyBand === "unknown" ? "selected" : ""}>Sin frecuencia</option>` : ""}
+      </select>
+    </label>
+  `;
+}
+
+function renderChart(pump, selectedBand = "all") {
+  const allItems = [...pump.measurements]
     .map(normalizeMeasurement)
     .filter((item) => MEASUREMENT_POINTS.includes(item.point))
     .sort((a, b) => a.date.localeCompare(b.date));
+  const items = allItems.filter((item) => selectedBand === "all" || frequencyBandKey(item.frequencyHz) === selectedBand);
   const maintenanceEvents = [...pump.maintenanceEvents]
     .map(normalizeMaintenanceEvent)
     .filter((item) => item.date)
     .sort((a, b) => a.date.localeCompare(b.date));
+  if (!items.length && selectedBand !== "all") {
+    return `<div class="empty-inline">No hay medidas en el rango de frecuencia seleccionado.</div>`;
+  }
   if (!items.length && !maintenanceEvents.length) {
     return `<div class="empty-inline">Todavia no hay medidas para graficar.</div>`;
   }
@@ -685,6 +749,7 @@ function renderChart(pump) {
               .map(
                 (point) => `
                   <g>
+                    <title>${escapeHtml(`${formatDate(point.date)} · ${point.point} · ${point.vibration} ${point.unit} · ${point.frequencyHz === null ? "Frecuencia no indicada" : `${point.frequencyHz} Hz`}`)}</title>
                     <circle cx="${point.x}" cy="${point.y}" r="4.5" style="stroke: ${POINT_COLORS[line.point]}" />
                   </g>
                 `,
@@ -709,6 +774,46 @@ function renderChart(pump) {
       </g>
       <text x="${pad}" y="${height - 8}">${escapeHtml(dates[0])}</text>
       <text x="${width - pad}" y="${height - 8}" text-anchor="end">${escapeHtml(dates.at(-1))}</text>
+    </svg>
+  `;
+}
+
+function renderFrequencyChart(pump) {
+  const items = pump.measurements
+    .map(normalizeMeasurement)
+    .filter((item) => MEASUREMENT_POINTS.includes(item.point) && item.frequencyHz !== null);
+  if (items.length < 2) {
+    return `<div class="empty-inline">Se necesitan al menos dos mediciones con frecuencia para mostrar esta comparacion.</div>`;
+  }
+
+  const width = 680;
+  const height = 240;
+  const pad = 42;
+  const frequencies = items.map((item) => item.frequencyHz);
+  const minFrequency = Math.min(...frequencies);
+  const maxFrequency = Math.max(...frequencies);
+  const maxVibration = Math.max(1, ...items.map((item) => item.vibration));
+  const xForFrequency = (value) =>
+    minFrequency === maxFrequency ? width / 2 : pad + ((value - minFrequency) / (maxFrequency - minFrequency)) * (width - pad * 2);
+  const yForVibration = (value) => height - pad - (value / maxVibration) * (height - pad * 2);
+
+  return `
+    <svg class="chart frequency-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Vibracion frente a frecuencia">
+      <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" />
+      <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}" />
+      ${items
+        .map(
+          (item) => `
+            <g>
+              <title>${escapeHtml(`${formatDate(item.date)} · ${item.point} · ${item.frequencyHz} Hz · ${item.vibration} ${item.unit}`)}</title>
+              <circle cx="${xForFrequency(item.frequencyHz).toFixed(1)}" cy="${yForVibration(item.vibration).toFixed(1)}" r="5" style="stroke: ${POINT_COLORS[item.point]}" />
+            </g>
+          `,
+        )
+        .join("")}
+      <text x="${pad}" y="${height - 10}">${minFrequency} Hz</text>
+      <text x="${width - pad}" y="${height - 10}" text-anchor="end">${maxFrequency} Hz</text>
+      <text x="${pad + 4}" y="${pad - 10}">${maxVibration.toFixed(2)} mm/s</text>
     </svg>
   `;
 }
@@ -752,6 +857,7 @@ function renderMeasurementsTable(measurements) {
           <tr>
             <th>Fecha</th>
             <th>Punto</th>
+            <th>Frecuencia</th>
             <th>Vibracion</th>
             <th>Origen</th>
           </tr>
@@ -763,6 +869,7 @@ function renderMeasurementsTable(measurements) {
                 <tr>
                   <td>${formatDate(item.date)}</td>
                   <td>${escapeHtml(item.point)}</td>
+                  <td>${item.frequencyHz === null ? "No indicada" : `${item.frequencyHz} Hz`}</td>
                   <td><strong>${item.vibration} ${escapeHtml(item.unit)}</strong></td>
                   <td>${escapeHtml(item.source)}</td>
                 </tr>
@@ -870,6 +977,44 @@ function renderMaintenanceModal() {
           <div class="modal-actions full">
             <button class="button secondary" type="button" id="cancelMaintenance">Cancelar</button>
             <button class="button" type="submit">Registrar mantenimiento</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
+function renderImportConditionsModal() {
+  if (!state.pendingImportData) return "";
+
+  return `
+    <div class="modal-backdrop" role="presentation">
+      <section class="confirm-modal import-conditions-modal" role="dialog" aria-modal="true" aria-labelledby="importConditionsTitle">
+        <p class="eyebrow">Condiciones de operacion</p>
+        <h3 id="importConditionsTitle">Frecuencia durante la medicion</h3>
+        <p>Indica qué bombas tienen variador y la frecuencia estable mantenida durante la ronda. El valor se aplicara a sus cuatro puntos.</p>
+        <form id="importConditionsForm" class="import-conditions-form">
+          <div class="condition-header"><span>Bomba</span><span>Variador</span><span>Frecuencia</span></div>
+          ${state.pendingImportData.conditions
+            .map(
+              (condition, index) => `
+                <div class="condition-row">
+                  <strong>${escapeHtml(condition.code)}</strong>
+                  <label class="toggle-field">
+                    <input type="checkbox" name="vfd-${index}" data-frequency-toggle="${index}" ${condition.hasVfd ? "checked" : ""} />
+                    <span>${condition.hasVfd ? "Sí" : "No"}</span>
+                  </label>
+                  <label class="frequency-entry">
+                    <input class="field" name="frequency-${index}" data-frequency-input="${index}" type="number" min="1" max="100" step="0.1" inputmode="decimal" value="${condition.frequencyHz ?? ""}" ${condition.hasVfd ? "required" : "disabled"} />
+                    <span>Hz</span>
+                  </label>
+                </div>
+              `,
+            )
+            .join("")}
+          <div class="modal-actions">
+            <button class="button secondary" type="button" id="cancelImportConditions">Cancelar</button>
+            <button class="button" type="submit">Continuar importacion</button>
           </div>
         </form>
       </section>
@@ -997,6 +1142,21 @@ function bindEvents() {
   document.querySelector("#confirmResetPump")?.addEventListener("click", confirmResetPump);
   document.querySelector("#cancelMaintenance")?.addEventListener("click", cancelMaintenance);
   document.querySelector("#maintenanceForm")?.addEventListener("submit", addMaintenance);
+  document.querySelector("#cancelImportConditions")?.addEventListener("click", cancelImportConditions);
+  document.querySelector("#importConditionsForm")?.addEventListener("submit", completeMeasurementImport);
+  document.querySelectorAll("[data-frequency-toggle]").forEach((toggle) => {
+    toggle.addEventListener("change", () => {
+      const index = toggle.dataset.frequencyToggle;
+      const input = document.querySelector(`[data-frequency-input="${index}"]`);
+      const label = toggle.closest(".toggle-field")?.querySelector("span");
+      if (input) {
+        input.disabled = !toggle.checked;
+        input.required = toggle.checked;
+        if (toggle.checked) input.focus();
+      }
+      if (label) label.textContent = toggle.checked ? "Sí" : "No";
+    });
+  });
   document.querySelector("#resetHistory")?.addEventListener("click", requestResetHistory);
   document.querySelector("#cancelResetHistory")?.addEventListener("click", cancelResetHistory);
   document.querySelector("#confirmResetHistory")?.addEventListener("click", confirmResetHistory);
@@ -1004,11 +1164,16 @@ function bindEvents() {
   document.querySelector("#incidentForm")?.addEventListener("submit", addIncident);
   document.querySelector("#importMeasures")?.addEventListener("click", () => document.querySelector("#measureFile")?.click());
   document.querySelector("#measureFile")?.addEventListener("change", importMeasurements);
+  document.querySelector("#frequencyFilter")?.addEventListener("change", (event) => {
+    state.frequencyBand = event.target.value;
+    render();
+  });
   document.querySelector("#downloadHistory")?.addEventListener("click", downloadHistoryExcel);
 }
 
 function selectPump(id) {
   state.selectedId = id;
+  state.frequencyBand = "all";
   render();
   window.requestAnimationFrame(() => {
     document.querySelector("#pumpDetail")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1028,6 +1193,8 @@ function addPump() {
     area: "Sin asignar",
     aviso: "",
     alarma: "",
+    hasVfd: false,
+    lastFrequencyHz: null,
     status: "Operativa",
     measurements: [],
     maintenanceEvents: [],
@@ -1057,6 +1224,7 @@ function saveSelectedPump(event) {
     area: String(form.get("area") ?? "").trim(),
     aviso: String(form.get("aviso") ?? "").trim(),
     alarma: String(form.get("alarma") ?? "").trim(),
+    hasVfd: form.get("hasVfd") === "on",
     status: String(form.get("status") ?? "Operativa"),
   };
 
@@ -1160,15 +1328,78 @@ async function importMeasurements(event) {
 
   try {
     const importData = await readMeasureFile(file);
-    const result = mergeMeasurements(importData.measurements);
-    const viewDataResult = mergeViewDataBlocks(importData.blocks);
-    savePumps();
-    saveViewDataBlocks();
-    syncSharedData();
-    if (!result.measurements) {
+    const codes = [...new Set(importData.measurements.map((row) => normalizeRow(row).code).filter(Boolean))].sort((a, b) =>
+      a.localeCompare(b, "es", { numeric: true, sensitivity: "base" }),
+    );
+    if (!codes.length) {
       state.importMessage = "No se encontraron medidas nuevas. Revisa que la hoja sea viewdata y que tenga Machine Name, OV-Velocity y RMS(mm/s).";
       render();
       showToast("No se encontraron medidas nuevas.");
+      return;
+    }
+    state.pendingImportData = {
+      importData,
+      conditions: codes.map((code) => {
+        const pump = state.pumps.find((item) => item.code.toLowerCase() === code.toLowerCase());
+        return { code, hasVfd: Boolean(pump?.hasVfd), frequencyHz: pump?.lastFrequencyHz ?? null };
+      }),
+    };
+    render();
+  } catch (error) {
+    state.importMessage = error.message || "No se pudo importar el archivo.";
+    render();
+    showToast(error.message || "No se pudo importar el archivo.");
+  } finally {
+    event.target.value = "";
+  }
+}
+
+function cancelImportConditions() {
+  state.pendingImportData = null;
+  render();
+  showToast("Importacion cancelada.");
+}
+
+async function completeMeasurementImport(event) {
+  event.preventDefault();
+  if (!state.pendingImportData) return;
+
+  const form = new FormData(event.target);
+  const conditionMap = new Map();
+  for (const [index, condition] of state.pendingImportData.conditions.entries()) {
+    const hasVfd = form.get(`vfd-${index}`) === "on";
+    const frequencyHz = hasVfd ? parseOptionalNumber(form.get(`frequency-${index}`)) : null;
+    if (hasVfd && (frequencyHz === null || frequencyHz <= 0)) {
+      showToast(`Indica la frecuencia de ${condition.code}.`);
+      document.querySelector(`[data-frequency-input="${index}"]`)?.focus();
+      return;
+    }
+    conditionMap.set(condition.code.toLowerCase(), { hasVfd, frequencyHz });
+  }
+
+  const { importData } = state.pendingImportData;
+  const enrichedMeasurements = importData.measurements.map((row) => {
+    const normalized = normalizeRow(row);
+    const condition = conditionMap.get(normalized.code.toLowerCase());
+    return { ...row, frequencyHz: condition?.frequencyHz ?? null };
+  });
+  state.pumps = state.pumps.map((pump) => {
+    const condition = conditionMap.get(pump.code.toLowerCase());
+    return condition ? { ...pump, hasVfd: condition.hasVfd, lastFrequencyHz: condition.frequencyHz } : pump;
+  });
+
+  try {
+    const result = mergeMeasurements(enrichedMeasurements, conditionMap);
+    const viewDataResult = mergeViewDataBlocks(importData.blocks);
+    state.pendingImportData = null;
+    state.frequencyBand = "all";
+    savePumps();
+    saveViewDataBlocks();
+    void syncSharedData();
+    if (!result.measurements) {
+      state.importMessage = "No se encontraron medidas nuevas; las lecturas ya estaban importadas.";
+      render();
+      showToast("No había medidas nuevas.");
       return;
     }
     state.importMessage = `Importacion correcta: ${result.measurements} medidas Velocity RMS en ${result.pumps} bombas. Excel historico actualizado con ${viewDataResult.rows} filas completas de ViewData.`;
@@ -1176,11 +1407,10 @@ async function importMeasurements(event) {
     showToast(`${result.measurements} medidas importadas en ${result.pumps} bombas.`);
     await updateSharePointExcel();
   } catch (error) {
-    state.importMessage = error.message || "No se pudo importar el archivo.";
+    state.pendingImportData = null;
+    state.importMessage = error.message || "No se pudo completar la importacion.";
     render();
-    showToast(error.message || "No se pudo importar el archivo.");
-  } finally {
-    event.target.value = "";
+    showToast(state.importMessage);
   }
 }
 
@@ -1395,7 +1625,7 @@ function splitCsvLine(line, separator) {
   return result;
 }
 
-function mergeMeasurements(rows) {
+function mergeMeasurements(rows, conditionMap = new Map()) {
   let importedMeasurements = 0;
   const touchedPumps = new Set();
 
@@ -1405,6 +1635,7 @@ function mergeMeasurements(rows) {
 
     let pump = state.pumps.find((item) => item.code.toLowerCase() === normalized.code.toLowerCase());
     if (!pump) {
+      const condition = conditionMap.get(normalized.code.toLowerCase());
       pump = {
         id: crypto.randomUUID(),
         code: normalized.code,
@@ -1412,8 +1643,11 @@ function mergeMeasurements(rows) {
         area: normalized.area || "Importada",
         aviso: "",
         alarma: "",
+        hasVfd: Boolean(condition?.hasVfd),
+        lastFrequencyHz: condition?.frequencyHz ?? null,
         status: "Operativa",
         measurements: [],
+        maintenanceEvents: [],
         incidents: [],
       };
       state.pumps.push(pump);
@@ -1425,6 +1659,7 @@ function mergeMeasurements(rows) {
       dateTime: normalized.dateTime,
       point: normalized.point,
       vibration: normalized.vibration,
+      frequencyHz: normalized.frequencyHz,
       unit: normalized.unit || "mm/s",
       source: "Fluke 805 FC",
     };
@@ -1889,6 +2124,7 @@ function normalizeRow(row) {
     dateTime: normalizeDateTime(get("fechaHora", "fecha hora", "datetime", "measurement date", "fecha medida", "date", "fecha")),
     point: normalizeMeasurementPoint(get("punto", "punto medida", "measurement point", "point")),
     vibration: parseNumber(get("vibracion", "vibration", "overall vibration", "valor", "rms")),
+    frequencyHz: parseOptionalNumber(get("frequencyHz", "frecuencia", "frecuencia hz", "hz")),
     unit: String(get("unidad", "unit")).trim() || "mm/s",
   };
 }
@@ -1921,6 +2157,13 @@ function parseNumber(value) {
   const normalized = String(value).replace(",", ".").replace(/[^\d.-]/g, "");
   const number = Number(normalized);
   return Number.isFinite(number) ? number : 0;
+}
+
+function parseOptionalNumber(value) {
+  if (value === null || value === undefined || String(value).trim() === "") return null;
+  const normalized = String(value).replace(",", ".").replace(/[^\d.-]/g, "");
+  const number = Number(normalized);
+  return Number.isFinite(number) ? number : null;
 }
 
 function normalizeDate(value) {
