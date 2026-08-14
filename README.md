@@ -11,6 +11,7 @@ Aplicacion web estatica para consultar el historial de vibraciones e incidencias
 - Cuatro puntos de medida fijos por bomba: `B-LA`, `B-LOA`, `M-LA`, `M-LOA`.
 - Historial de medidas por bomba.
 - Registro de mantenimientos por bomba con fecha, tipo, responsable y marcador visible en la grafica de vibracion.
+- Registro de frecuencia de variador por bomba y ronda, con filtro por bandas de 5 Hz y grafica vibracion-frecuencia.
 - Registro manual de incidencias por operario.
 - Eliminacion de bombas con confirmacion previa.
 - Reseteo de las medidas activas de una bomba con confirmacion previa, conservando el historico maestro.
