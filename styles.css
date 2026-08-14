@@ -502,6 +502,24 @@ textarea.field {
   color: var(--text);
 }
 
+.checkbox-field {
+  min-height: 40px;
+  display: flex !important;
+  align-items: center;
+  gap: 9px !important;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.checkbox-field input,
+.toggle-field input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
 .history-section {
   margin-top: 22px;
   padding-top: 18px;
@@ -529,6 +547,29 @@ textarea.field {
 .section-heading > div span {
   display: block;
   margin-top: 3px;
+}
+
+.chart-actions {
+  display: flex;
+  align-items: end;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.frequency-filter {
+  display: grid;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.frequency-filter .field {
+  min-height: 34px;
+  min-width: 130px;
+  padding: 6px 9px;
+  font-size: 13px;
 }
 
 .chart {
@@ -728,6 +769,64 @@ td strong {
 .maintenance-date strong,
 .maintenance-date span {
   display: block;
+}
+
+.import-conditions-modal {
+  width: min(720px, 100%);
+}
+
+.import-conditions-form {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.condition-header,
+.condition-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) 100px 180px;
+  gap: 12px;
+  align-items: center;
+}
+
+.condition-header {
+  padding: 0 12px 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.condition-row {
+  min-height: 56px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(247, 248, 245, 0.7);
+}
+
+.toggle-field {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.frequency-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.frequency-entry .field:disabled {
+  background: #eef1ed;
+  color: #8a928b;
 }
 
 .maintenance-date span {
@@ -965,6 +1064,24 @@ td strong {
   }
 
   .maintenance-event {
+    grid-template-columns: 1fr;
+  }
+
+  .section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .chart-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .condition-header {
+    display: none;
+  }
+
+  .condition-row {
     grid-template-columns: 1fr;
   }
 
