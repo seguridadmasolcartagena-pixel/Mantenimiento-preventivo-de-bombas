@@ -189,6 +189,7 @@ function normalizeMeasurement(item) {
     dateTime: item.dateTime || item.date || "",
     point: normalizeMeasurementPoint(item.point),
     vibration: Number(item.vibration) || 0,
+    cfPlus: parseOptionalNumber(item.cfPlus),
     frequencyHz: parseOptionalNumber(item.frequencyHz),
     unit: item.unit || "mm/s",
     source: item.source || "Fluke 805 FC",
@@ -599,6 +600,14 @@ function renderDetail(pump) {
 
       <section class="history-section">
         <div class="section-heading">
+          <h4>Evolucion de CF+</h4>
+          <span>Indicador de condicion del rodamiento</span>
+        </div>
+        ${renderCfPlusChart(pump, state.frequencyBand)}
+      </section>
+
+      <section class="history-section">
+        <div class="section-heading">
           <h4>Mantenimientos</h4>
           <span>${pump.maintenanceEvents.length} registrados</span>
         </div>
@@ -631,6 +640,7 @@ function renderPointSummary(point, item) {
       <span>${point}</span>
       <strong>${item ? `${item.vibration} ${escapeHtml(item.unit)}` : "-"}</strong>
       <small>${item ? `${formatDate(item.date)} · ${item.frequencyHz === null ? "sin Hz" : `${item.frequencyHz} Hz`}` : "sin medida"}</small>
+      <small>${item?.cfPlus === null || item?.cfPlus === undefined ? "CF+ no indicado" : `CF+ ${item.cfPlus}`}</small>
     </div>
   `;
 }
@@ -823,6 +833,77 @@ function renderFrequencyChart(pump) {
   `;
 }
 
+function renderCfPlusChart(pump, selectedBand = "all") {
+  const items = pump.measurements
+    .map(normalizeMeasurement)
+    .filter(
+      (item) =>
+        MEASUREMENT_POINTS.includes(item.point) &&
+        item.cfPlus !== null &&
+        (selectedBand === "all" || frequencyBandKey(item.frequencyHz) === selectedBand),
+    )
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (!items.length) {
+    return `<div class="empty-inline">No hay valores CF+ disponibles${selectedBand === "all" ? "." : " en el rango de frecuencia seleccionado."}</div>`;
+  }
+
+  const width = 680;
+  const height = 250;
+  const pad = 38;
+  const dates = [...new Set(items.map((item) => item.date))].slice(-10);
+  const visibleItems = items.filter((item) => dates.includes(item.date));
+  const maxCfPlus = Math.max(1, ...visibleItems.map((item) => item.cfPlus));
+  const xForDate = (date) => {
+    const index = dates.indexOf(date);
+    return dates.length === 1 ? width / 2 : pad + (index * (width - pad * 2)) / (dates.length - 1);
+  };
+  const yForValue = (value) => height - pad - (value / maxCfPlus) * (height - pad * 2);
+  const series = MEASUREMENT_POINTS.map((point) => {
+    const chartPoints = visibleItems
+      .filter((item) => item.point === point)
+      .map((item) => ({ ...item, x: xForDate(item.date), y: yForValue(item.cfPlus) }));
+    const path = chartPoints.map((item, index) => `${index ? "L" : "M"} ${item.x.toFixed(1)} ${item.y.toFixed(1)}`).join(" ");
+    return { point, chartPoints, path };
+  });
+
+  return `
+    <svg class="chart cfplus-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Evolucion de CFPlus">
+      <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" />
+      <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}" />
+      ${series
+        .map(
+          (line) => `
+            <path d="${line.path}" style="stroke: ${POINT_COLORS[line.point]}" />
+            ${line.chartPoints
+              .map(
+                (point) => `
+                  <g>
+                    <title>${escapeHtml(`${formatDate(point.date)} · ${point.point} · CF+ ${point.cfPlus} · ${point.frequencyHz === null ? "Frecuencia no indicada" : `${point.frequencyHz} Hz`}`)}</title>
+                    <circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="4.5" style="stroke: ${POINT_COLORS[line.point]}" />
+                  </g>
+                `,
+              )
+              .join("")}
+          `,
+        )
+        .join("")}
+      ${MEASUREMENT_POINTS
+        .map(
+          (point, index) => `
+            <g class="chart-legend">
+              <rect x="${pad + index * 118}" y="12" width="10" height="10" rx="2" style="fill: ${POINT_COLORS[point]}" />
+              <text x="${pad + 16 + index * 118}" y="22">${point}</text>
+            </g>
+          `,
+        )
+        .join("")}
+      <text x="${pad + 4}" y="${pad - 9}">CF+ ${maxCfPlus.toFixed(2)}</text>
+      <text x="${pad}" y="${height - 9}">${escapeHtml(dates[0])}</text>
+      <text x="${width - pad}" y="${height - 9}" text-anchor="end">${escapeHtml(dates.at(-1))}</text>
+    </svg>
+  `;
+}
+
 function renderMaintenanceEvents(events) {
   const rows = [...events].map(normalizeMaintenanceEvent).sort((a, b) => b.date.localeCompare(a.date));
   if (!rows.length) return `<div class="empty-inline">No hay mantenimientos registrados.</div>`;
@@ -864,6 +945,7 @@ function renderMeasurementsTable(measurements) {
             <th>Punto</th>
             <th>Frecuencia</th>
             <th>Vibracion</th>
+            <th>CF+</th>
             <th>Origen</th>
           </tr>
         </thead>
@@ -876,6 +958,7 @@ function renderMeasurementsTable(measurements) {
                   <td>${escapeHtml(item.point)}</td>
                   <td>${item.frequencyHz === null ? "No indicada" : `${item.frequencyHz} Hz`}</td>
                   <td><strong>${item.vibration} ${escapeHtml(item.unit)}</strong></td>
+                  <td>${item.cfPlus === null ? "No indicado" : item.cfPlus}</td>
                   <td>${escapeHtml(item.source)}</td>
                 </tr>
               `,
@@ -1473,12 +1556,14 @@ function parseViewDataSheet(rows) {
 
     const dateColumn = findDateColumn(rows, headerRows.groupRowIndex, headerRows.valueRowIndex);
     const velocityRmsColumn = findVelocityRmsColumn(rows, headerRows.groupRowIndex, headerRows.valueRowIndex);
+    const cfPlusColumn = findCfPlusColumn(rows, headerRows.groupRowIndex, headerRows.valueRowIndex);
     if (dateColumn === -1 || velocityRmsColumn === -1) return;
 
     const block = {
       machineName,
       dateColumn,
       valueColumn: velocityRmsColumn,
+      cfPlusColumn,
       headerRows: [
         normalizeRowLength(rows[rowIndex]),
         normalizeRowLength(rows[headerRows.groupRowIndex]),
@@ -1495,6 +1580,7 @@ function parseViewDataSheet(rows) {
       const date = normalizeDate(dataRow[dateColumn]);
       const dateTime = normalizeDateTime(dataRow[dateColumn]);
       const vibration = parseNumber(dataRow[velocityRmsColumn]);
+      const cfPlus = cfPlusColumn === -1 ? null : parseOptionalNumber(dataRow[cfPlusColumn]);
       if (!date || !vibration) continue;
 
       measurements.push({
@@ -1503,6 +1589,7 @@ function parseViewDataSheet(rows) {
         fecha: date,
         fechaHora: dateTime,
         vibracion: vibration,
+        cfPlus,
         unidad: "mm/s",
         nombre: code,
         area: "",
@@ -1590,6 +1677,15 @@ function findVelocityRmsColumn(rows, groupRowIndex, valueRowIndex) {
   return headerRow.findIndex((cell) => isVelocityRmsHeader(cell));
 }
 
+function findCfPlusColumn(rows, groupRowIndex, valueRowIndex) {
+  for (const index of [groupRowIndex, valueRowIndex, valueRowIndex + 1]) {
+    const row = rows[index] ?? [];
+    const column = row.findIndex((cell) => cleanKey(cell) === "cfplus");
+    if (column !== -1) return column;
+  }
+  return -1;
+}
+
 function findColumnByText(row, text) {
   const target = cleanKey(text);
   return row.findIndex((cell) => cleanKey(cell).includes(target));
@@ -1664,19 +1760,28 @@ function mergeMeasurements(rows, conditionMap = new Map()) {
       dateTime: normalized.dateTime,
       point: normalized.point,
       vibration: normalized.vibration,
+      cfPlus: normalized.cfPlus,
       frequencyHz: normalized.frequencyHz,
       unit: normalized.unit || "mm/s",
       source: "Fluke 805 FC",
     };
 
-    const alreadyExists = pump.measurements.some(
+    const existingMeasurement = pump.measurements.find(
       (item) =>
         item.date === measurement.date &&
         item.dateTime === measurement.dateTime &&
         item.point === measurement.point &&
         Number(item.vibration) === Number(measurement.vibration),
     );
-    if (alreadyExists) continue;
+    if (existingMeasurement) {
+      if (existingMeasurement.cfPlus === null || existingMeasurement.cfPlus === undefined) {
+        existingMeasurement.cfPlus = measurement.cfPlus;
+      }
+      if (existingMeasurement.frequencyHz === null || existingMeasurement.frequencyHz === undefined) {
+        existingMeasurement.frequencyHz = measurement.frequencyHz;
+      }
+      continue;
+    }
 
     pump.measurements.push(measurement);
     touchedPumps.add(pump.id);
@@ -2129,6 +2234,7 @@ function normalizeRow(row) {
     dateTime: normalizeDateTime(get("fechaHora", "fecha hora", "datetime", "measurement date", "fecha medida", "date", "fecha")),
     point: normalizeMeasurementPoint(get("punto", "punto medida", "measurement point", "point")),
     vibration: parseNumber(get("vibracion", "vibration", "overall vibration", "valor", "rms")),
+    cfPlus: parseOptionalNumber(get("cfPlus", "cf plus", "crest factor plus")),
     frequencyHz: parseOptionalNumber(get("frequencyHz", "frecuencia", "frecuencia hz", "hz")),
     unit: String(get("unidad", "unit")).trim() || "mm/s",
   };
