@@ -853,6 +853,11 @@ function renderCfPlusChart(pump, selectedBand = "all") {
   const dates = [...new Set(items.map((item) => item.date))].slice(-10);
   const visibleItems = items.filter((item) => dates.includes(item.date));
   const maxCfPlus = Math.max(1, ...visibleItems.map((item) => item.cfPlus));
+  const yTicks = Array.from({ length: 5 }, (_, index) => {
+    const value = (maxCfPlus * (4 - index)) / 4;
+    return { value, y: pad + (index * (height - pad * 2)) / 4 };
+  });
+  const formatCfAxisValue = (value) => (maxCfPlus <= 10 ? value.toFixed(2) : value.toFixed(1));
   const xForDate = (date) => {
     const index = dates.indexOf(date);
     return dates.length === 1 ? width / 2 : pad + (index * (width - pad * 2)) / (dates.length - 1);
@@ -868,6 +873,16 @@ function renderCfPlusChart(pump, selectedBand = "all") {
 
   return `
     <svg class="chart cfplus-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Evolucion de CFPlus">
+      ${yTicks
+        .map(
+          (tick) => `
+            <g class="axis-tick">
+              <line x1="${pad}" y1="${tick.y.toFixed(1)}" x2="${width - pad}" y2="${tick.y.toFixed(1)}" style="stroke: #e1e6df; stroke-width: 1" />
+              <text x="${pad - 7}" y="${(tick.y + 4).toFixed(1)}" text-anchor="end">${formatCfAxisValue(tick.value)}</text>
+            </g>
+          `,
+        )
+        .join("")}
       <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" />
       <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}" />
       ${series
@@ -897,7 +912,7 @@ function renderCfPlusChart(pump, selectedBand = "all") {
           `,
         )
         .join("")}
-      <text x="${pad + 4}" y="${pad - 9}">CF+ ${maxCfPlus.toFixed(2)}</text>
+      <text x="${pad + 4}" y="${pad - 9}">CF+</text>
       <text x="${pad}" y="${height - 9}">${escapeHtml(dates[0])}</text>
       <text x="${width - pad}" y="${height - 9}" text-anchor="end">${escapeHtml(dates.at(-1))}</text>
     </svg>
