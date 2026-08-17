@@ -419,8 +419,13 @@ function render() {
             <input id="measureFile" type="file" accept=".xlsx,.xls,.xlsm" hidden />
             <button class="button secondary" id="importMeasures">Importar Excel</button>
             <button class="button secondary" id="downloadHistory">Descargar Excel maestro</button>
-            <button class="button secondary" id="resetHistory">Resetear historial</button>
             <button class="button" id="addPump">+ Nueva bomba</button>
+            <details class="overflow-menu">
+              <summary aria-label="Mas opciones" title="Mas opciones">•••</summary>
+              <div class="overflow-menu-panel">
+                <button type="button" id="resetHistory">Resetear historial</button>
+              </div>
+            </details>
           </div>
         </section>
         ${state.importMessage ? `<div class="import-message">${escapeHtml(state.importMessage)}</div>` : ""}
