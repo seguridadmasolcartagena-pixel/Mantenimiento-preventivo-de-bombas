@@ -713,6 +713,11 @@ function renderChart(pump, selectedBand = "all") {
     { key: "alarma", label: "Alarma", value: parseThreshold(pump.alarma), color: "#b42318" },
   ].filter((threshold) => threshold.value !== null);
   const maxValue = Math.max(1, ...items.map((item) => Number(item.vibration)), ...thresholds.map((item) => item.value));
+  const yTicks = Array.from({ length: 5 }, (_, index) => {
+    const value = (maxValue * (4 - index)) / 4;
+    return { value, y: pad + (index * (height - pad * 2)) / 4 };
+  });
+  const formatVibrationAxisValue = (value) => (maxValue <= 10 ? value.toFixed(2) : value.toFixed(1));
   const xForDate = (date) => {
     const index = dates.indexOf(date);
     return dates.length === 1 ? width / 2 : pad + (index * (width - pad * 2)) / (dates.length - 1);
@@ -730,6 +735,16 @@ function renderChart(pump, selectedBand = "all") {
 
   return `
     <svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Grafica de vibracion">
+      ${yTicks
+        .map(
+          (tick) => `
+            <g class="axis-tick">
+              <line x1="${pad}" y1="${tick.y.toFixed(1)}" x2="${width - pad}" y2="${tick.y.toFixed(1)}" style="stroke: #e1e6df; stroke-width: 1" />
+              <text x="${pad - 7}" y="${(tick.y + 4).toFixed(1)}" text-anchor="end">${formatVibrationAxisValue(tick.value)}</text>
+            </g>
+          `,
+        )
+        .join("")}
       <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" />
       <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}" />
       ${maintenanceMarkers
@@ -808,12 +823,27 @@ function renderFrequencyChart(pump) {
   const minFrequency = Math.min(...frequencies);
   const maxFrequency = Math.max(...frequencies);
   const maxVibration = Math.max(1, ...items.map((item) => item.vibration));
+  const yTicks = Array.from({ length: 5 }, (_, index) => {
+    const value = (maxVibration * (4 - index)) / 4;
+    return { value, y: pad + (index * (height - pad * 2)) / 4 };
+  });
+  const formatVibrationAxisValue = (value) => (maxVibration <= 10 ? value.toFixed(2) : value.toFixed(1));
   const xForFrequency = (value) =>
     minFrequency === maxFrequency ? width / 2 : pad + ((value - minFrequency) / (maxFrequency - minFrequency)) * (width - pad * 2);
   const yForVibration = (value) => height - pad - (value / maxVibration) * (height - pad * 2);
 
   return `
     <svg class="chart frequency-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Vibracion frente a frecuencia">
+      ${yTicks
+        .map(
+          (tick) => `
+            <g class="axis-tick">
+              <line x1="${pad}" y1="${tick.y.toFixed(1)}" x2="${width - pad}" y2="${tick.y.toFixed(1)}" style="stroke: #e1e6df; stroke-width: 1" />
+              <text x="${pad - 7}" y="${(tick.y + 4).toFixed(1)}" text-anchor="end">${formatVibrationAxisValue(tick.value)}</text>
+            </g>
+          `,
+        )
+        .join("")}
       <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" />
       <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}" />
       ${items
@@ -828,7 +858,7 @@ function renderFrequencyChart(pump) {
         .join("")}
       <text x="${pad}" y="${height - 10}">${minFrequency} Hz</text>
       <text x="${width - pad}" y="${height - 10}" text-anchor="end">${maxFrequency} Hz</text>
-      <text x="${pad + 4}" y="${pad - 10}">${maxVibration.toFixed(2)} mm/s</text>
+      <text x="${pad + 4}" y="${pad - 10}">mm/s</text>
     </svg>
   `;
 }
