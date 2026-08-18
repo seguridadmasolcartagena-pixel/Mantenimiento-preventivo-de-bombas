@@ -424,6 +424,11 @@ button {
   color: var(--danger);
 }
 
+.tag.maintenance {
+  background: #e8eef7;
+  color: #334155;
+}
+
 .tag.stop {
   background: var(--danger-soft);
   color: var(--danger);
@@ -443,6 +448,10 @@ button {
 
 .status-dot.alarm {
   background: var(--danger);
+}
+
+.status-dot.maintenance {
+  background: #475569;
 }
 
 .status-dot.stop {
