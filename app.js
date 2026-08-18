@@ -9,13 +9,20 @@ const DEFAULT_CONFIG_SAVE_FLOW_URL = "https://default65afa47b9e4e4ad28cfe30d4118
 const DEFAULT_CONFIG_LOAD_FLOW_URL = "https://default65afa47b9e4e4ad28cfe30d4118f06.2e.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/29/workflows/d6a6f47846c4459c82242e000ac1c256/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=3sYKAXENMKBE6W-Mw8v59t_lryukYAWg2DtW-DFYPVQ";
 const FILTER_STATUSES = ["Todas", "Operativa", "Aviso", "Alarma", "Parada"];
 const MANUAL_STATUSES = ["Operativa", "Parada"];
-const MEASUREMENT_POINTS = ["B-LA", "B-LOA", "M-LA", "M-LOA"];
-const MOTOR_MEASUREMENT_POINTS = new Set(["M-LA", "M-LOA"]);
+const PUMP_TYPES = ["Centrífuga", "Pistón", "Engranajes", "Tornillo", "Lóbulos", "Diafragma", "Otra"];
+const STANDARD_MEASUREMENT_POINTS = ["B-LA", "B-LOA", "M-LA", "M-LOA"];
+const PISTON_MEASUREMENT_POINTS = ["M-LA", "M-LOA", "R", "A", "B"];
+const MEASUREMENT_POINTS = [...new Set([...STANDARD_MEASUREMENT_POINTS, ...PISTON_MEASUREMENT_POINTS, "M-AX"])];
+const MOTOR_MEASUREMENT_POINTS = new Set(["M-LA", "M-LOA", "M-AX"]);
 const POINT_COLORS = {
   "B-LA": "#0f766e",
   "B-LOA": "#2563eb",
   "M-LA": "#a16207",
   "M-LOA": "#b42318",
+  R: "#7c3aed",
+  A: "#0891b2",
+  B: "#be185d",
+  "M-AX": "#475569",
 };
 
 const demoPumps = [
@@ -138,6 +145,8 @@ const state = {
   pendingDeleteId: null,
   pendingPumpResetId: null,
   maintenancePumpId: null,
+  editingMaintenanceId: null,
+  pendingMaintenanceDelete: null,
   pendingImportData: null,
   frequencyBand: "all",
   pendingHistoryReset: false,
@@ -171,10 +180,12 @@ function normalizePump(pump) {
     id: pump.id ?? crypto.randomUUID(),
     code: pump.code ?? "",
     name: pump.name ?? "Bomba sin nombre",
+    pumpType: normalizePumpType(pump.pumpType, pump.name),
     area: pump.area ?? "Sin asignar",
     aviso: pump.aviso ?? "",
     alarma: pump.alarma ?? "",
     motorGroup: String(pump.motorGroup ?? "").trim(),
+    hasAxialMeasurement: Boolean(pump.hasAxialMeasurement),
     hasVfd: Boolean(pump.hasVfd),
     lastFrequencyHz: parseOptionalNumber(pump.lastFrequencyHz),
     status: normalizeStatus(pump.status),
@@ -206,6 +217,18 @@ function normalizeMaintenanceEvent(item) {
     technician: item.technician || "",
     description: item.description || "",
   };
+}
+
+function normalizePumpType(value, name = "") {
+  const requested = String(value ?? "").trim();
+  const match = PUMP_TYPES.find((type) => cleanKey(type) === cleanKey(requested));
+  if (match) return match;
+  return cleanKey(name).includes("piston") ? "Pistón" : "Otra";
+}
+
+function measurementPointsForPump(pump) {
+  const base = normalizePumpType(pump.pumpType, pump.name) === "Pistón" ? PISTON_MEASUREMENT_POINTS : STANDARD_MEASUREMENT_POINTS;
+  return pump.hasAxialMeasurement ? [...base, "M-AX"] : [...base];
 }
 
 function markLocalDataUpdated() {
@@ -290,9 +313,10 @@ function latestMeasurement(pump) {
 }
 
 function latestMeasurementsByPoint(pump) {
-  const latest = Object.fromEntries(MEASUREMENT_POINTS.map((point) => [point, null]));
+  const measurementPoints = measurementPointsForPump(pump);
+  const latest = Object.fromEntries(measurementPoints.map((point) => [point, null]));
   for (const item of [...pump.measurements].sort(compareMeasurements)) {
-    if (MEASUREMENT_POINTS.includes(item.point)) latest[item.point] = item;
+    if (measurementPoints.includes(item.point)) latest[item.point] = item;
   }
   return latest;
 }
@@ -336,7 +360,7 @@ function pumpAlert(pump) {
   const latestByPoint = latestMeasurementsByPoint(pump);
   const warningThreshold = parseThreshold(pump.aviso);
   const alarmThreshold = parseThreshold(pump.alarma);
-  const triggeredPoints = MEASUREMENT_POINTS.map((point) => {
+  const triggeredPoints = measurementPointsForPump(pump).map((point) => {
     const item = latestByPoint[point];
     const value = Number(item?.vibration);
     if (!item || !Number.isFinite(value)) return null;
@@ -469,6 +493,7 @@ function render() {
     ${renderDeleteModal()}
     ${renderResetPumpModal()}
     ${renderMaintenanceModal()}
+    ${renderDeleteMaintenanceModal()}
     ${renderImportConditionsModal()}
     ${renderResetHistoryModal()}
     <div class="toast" id="toast"></div>
@@ -495,7 +520,9 @@ function renderPumpRow(pump) {
           <span class="tag">${latest ? `${latest.vibration} ${latest.unit}` : "sin medidas"}</span>
           <span class="tag">${pump.incidents.length} incid.</span>
           <span class="tag">${pump.maintenanceEvents.length} mant.</span>
+          <span class="tag">${escapeHtml(pump.pumpType)}</span>
           ${pump.hasVfd ? `<span class="tag">Variador</span>` : ""}
+          ${pump.hasAxialMeasurement ? `<span class="tag">M-AX</span>` : ""}
           ${pump.motorGroup ? `<span class="tag">Motor ${escapeHtml(pump.motorGroup)}</span>` : ""}
         </div>
       </div>
@@ -509,6 +536,7 @@ function renderDetail(pump) {
   const status = statusClass(pumpStatus);
   const latest = latestMeasurement(pump);
   const latestByPoint = latestMeasurementsByPoint(pump);
+  const measurementPoints = measurementPointsForPump(pump);
   const average = pump.measurements.length
     ? pump.measurements.reduce((sum, item) => sum + Number(item.vibration), 0) / pump.measurements.length
     : 0;
@@ -529,10 +557,10 @@ function renderDetail(pump) {
       <section class="latest-round">
         <div class="section-heading">
           <h4>Ultima ronda</h4>
-          <span>4 puntos fijos</span>
+          <span>${measurementPoints.length} puntos configurados</span>
         </div>
         <div class="point-grid">
-          ${MEASUREMENT_POINTS.map((point) => renderPointSummary(point, latestByPoint[point])).join("")}
+          ${measurementPoints.map((point) => renderPointSummary(point, latestByPoint[point])).join("")}
         </div>
       </section>
 
@@ -545,9 +573,15 @@ function renderDetail(pump) {
           Area
           <input class="field" name="area" value="${escapeHtml(pump.area)}" required />
         </label>
-        <label class="full">
-          Tipo de bomba
+        <label>
+          Nombre / descripción
           <input class="field" name="name" value="${escapeHtml(pump.name)}" required />
+        </label>
+        <label>
+          Tipo de bomba
+          <select class="field" name="pumpType">
+            ${PUMP_TYPES.map((type) => `<option value="${type}" ${pump.pumpType === type ? "selected" : ""}>${type}</option>`).join("")}
+          </select>
         </label>
         <label>
           Aviso
@@ -580,8 +614,12 @@ function renderDetail(pump) {
           <input name="hasVfd" type="checkbox" ${pump.hasVfd ? "checked" : ""} />
           <span>La bomba dispone de variador de frecuencia</span>
         </label>
+        <label class="checkbox-field">
+          <input name="hasAxialMeasurement" type="checkbox" ${pump.hasAxialMeasurement ? "checked" : ""} />
+          <span>Añadir medida axial del motor M-AX</span>
+        </label>
         <div class="status-explain">
-          Estado actual: <strong>${escapeHtml(pumpStatus)}</strong>. Aviso y Alarma se calculan con las ultimas medidas de B-LA, B-LOA, M-LA y M-LOA.
+          Estado actual: <strong>${escapeHtml(pumpStatus)}</strong>. Aviso y Alarma se calculan con los puntos configurados para esta bomba.
         </div>
         <div class="detail-actions">
           <button class="button danger" type="button" id="deletePump">Eliminar bomba</button>
@@ -594,7 +632,7 @@ function renderDetail(pump) {
         <div class="section-heading">
           <div>
             <h4>Grafica de vibracion</h4>
-            <span>B-LA · B-LOA · M-LA · M-LOA</span>
+            <span>${measurementPoints.join(" · ")}</span>
           </div>
           <div class="chart-actions">
             ${renderFrequencyFilter(pump)}
@@ -625,7 +663,7 @@ function renderDetail(pump) {
           <h4>Mantenimientos</h4>
           <span>${pump.maintenanceEvents.length} registrados</span>
         </div>
-        ${renderMaintenanceEvents(pump.maintenanceEvents)}
+        ${renderMaintenanceEvents(pump)}
       </section>
 
       <section class="history-section">
@@ -698,9 +736,10 @@ function renderFrequencyFilter(pump) {
 }
 
 function renderChart(pump, selectedBand = "all") {
+  const measurementPoints = measurementPointsForPump(pump);
   const allItems = [...pump.measurements]
     .map(normalizeMeasurement)
-    .filter((item) => MEASUREMENT_POINTS.includes(item.point))
+    .filter((item) => measurementPoints.includes(item.point))
     .sort((a, b) => a.date.localeCompare(b.date));
   const items = allItems.filter((item) => selectedBand === "all" || frequencyBandKey(item.frequencyHz) === selectedBand);
   const maintenanceEvents = [...pump.maintenanceEvents]
@@ -716,7 +755,7 @@ function renderChart(pump, selectedBand = "all") {
 
   const width = 680;
   const height = 270;
-  const pad = 34;
+  const pad = 58;
   const dates = [...new Set([...items.map((item) => item.date), ...maintenanceEvents.map((item) => item.date)])]
     .sort()
     .slice(-10);
@@ -740,7 +779,7 @@ function renderChart(pump, selectedBand = "all") {
   const thresholdLines = thresholds.map((threshold) => ({ ...threshold, y: yForValue(threshold.value) }));
   const maintenanceMarkers = visibleMaintenance.map((item) => ({ ...item, x: xForDate(item.date) }));
 
-  const series = MEASUREMENT_POINTS.map((point) => {
+  const series = measurementPoints.map((point) => {
     const pointItems = visibleItems.filter((item) => item.point === point);
     const chartPoints = pointItems.map((item) => ({ ...item, x: xForDate(item.date), y: yForValue(item.vibration) }));
     const path = chartPoints.map((item, index) => `${index ? "L" : "M"} ${item.x.toFixed(1)} ${item.y.toFixed(1)}`).join(" ");
@@ -802,19 +841,19 @@ function renderChart(pump, selectedBand = "all") {
           `,
         )
         .join("")}
-      ${MEASUREMENT_POINTS
+      ${measurementPoints
         .map(
           (point, index) => `
             <g class="chart-legend">
-              <rect x="${pad + index * 118}" y="12" width="10" height="10" rx="2" style="fill: ${POINT_COLORS[point]}" />
-              <text x="${pad + 16 + index * 118}" y="22">${point}</text>
+              <rect x="${pad + index * ((width - pad * 2) / measurementPoints.length)}" y="12" width="10" height="10" rx="2" style="fill: ${POINT_COLORS[point]}" />
+              <text x="${pad + 16 + index * ((width - pad * 2) / measurementPoints.length)}" y="22">${point}</text>
             </g>
           `,
         )
         .join("")}
       <g class="chart-legend maintenance-legend">
-        <rect x="506" y="12" width="10" height="10" rx="2" />
-        <text x="522" y="22">Mantenimiento</text>
+        <rect x="${pad}" y="34" width="10" height="10" rx="2" />
+        <text x="${pad + 16}" y="44">Mantenimiento</text>
       </g>
       <text x="${pad}" y="${height - 8}">${escapeHtml(dates[0])}</text>
       <text x="${width - pad}" y="${height - 8}" text-anchor="end">${escapeHtml(dates.at(-1))}</text>
@@ -823,9 +862,10 @@ function renderChart(pump, selectedBand = "all") {
 }
 
 function renderFrequencyChart(pump) {
+  const measurementPoints = measurementPointsForPump(pump);
   const items = pump.measurements
     .map(normalizeMeasurement)
-    .filter((item) => MEASUREMENT_POINTS.includes(item.point) && item.frequencyHz !== null);
+    .filter((item) => measurementPoints.includes(item.point) && item.frequencyHz !== null);
   if (items.length < 2) {
     return `<div class="empty-inline">Se necesitan al menos dos mediciones con frecuencia para mostrar esta comparacion.</div>`;
   }
@@ -878,11 +918,12 @@ function renderFrequencyChart(pump) {
 }
 
 function renderCfPlusChart(pump, selectedBand = "all") {
+  const measurementPoints = measurementPointsForPump(pump);
   const items = pump.measurements
     .map(normalizeMeasurement)
     .filter(
       (item) =>
-        MEASUREMENT_POINTS.includes(item.point) &&
+        measurementPoints.includes(item.point) &&
         item.cfPlus !== null &&
         (selectedBand === "all" || frequencyBandKey(item.frequencyHz) === selectedBand),
     )
@@ -907,7 +948,7 @@ function renderCfPlusChart(pump, selectedBand = "all") {
     return dates.length === 1 ? width / 2 : pad + (index * (width - pad * 2)) / (dates.length - 1);
   };
   const yForValue = (value) => height - pad - (value / maxCfPlus) * (height - pad * 2);
-  const series = MEASUREMENT_POINTS.map((point) => {
+  const series = measurementPoints.map((point) => {
     const chartPoints = visibleItems
       .filter((item) => item.point === point)
       .map((item) => ({ ...item, x: xForDate(item.date), y: yForValue(item.cfPlus) }));
@@ -946,12 +987,12 @@ function renderCfPlusChart(pump, selectedBand = "all") {
           `,
         )
         .join("")}
-      ${MEASUREMENT_POINTS
+      ${measurementPoints
         .map(
           (point, index) => `
             <g class="chart-legend">
-              <rect x="${pad + index * 118}" y="12" width="10" height="10" rx="2" style="fill: ${POINT_COLORS[point]}" />
-              <text x="${pad + 16 + index * 118}" y="22">${point}</text>
+              <rect x="${pad + index * ((width - pad * 2) / measurementPoints.length)}" y="12" width="10" height="10" rx="2" style="fill: ${POINT_COLORS[point]}" />
+              <text x="${pad + 16 + index * ((width - pad * 2) / measurementPoints.length)}" y="22">${point}</text>
             </g>
           `,
         )
@@ -963,8 +1004,8 @@ function renderCfPlusChart(pump, selectedBand = "all") {
   `;
 }
 
-function renderMaintenanceEvents(events) {
-  const rows = [...events].map(normalizeMaintenanceEvent).sort((a, b) => b.date.localeCompare(a.date));
+function renderMaintenanceEvents(pump) {
+  const rows = [...pump.maintenanceEvents].map(normalizeMaintenanceEvent).sort((a, b) => b.date.localeCompare(a.date));
   if (!rows.length) return `<div class="empty-inline">No hay mantenimientos registrados.</div>`;
 
   return `
@@ -977,6 +1018,10 @@ function renderMaintenanceEvents(events) {
               <div>
                 <strong>${escapeHtml(item.description || "Mantenimiento registrado")}</strong>
                 <p>${item.technician ? `Realizado por ${escapeHtml(item.technician)}` : "Responsable no indicado"}</p>
+              </div>
+              <div class="maintenance-actions">
+                <button class="button secondary button-small" type="button" data-edit-maintenance="${item.id}">Editar</button>
+                <button class="button danger button-small" type="button" data-delete-maintenance="${item.id}">Eliminar</button>
               </div>
             </article>
           `,
@@ -1092,40 +1137,62 @@ function renderMaintenanceModal() {
 
   const pump = state.pumps.find((item) => item.id === state.maintenancePumpId);
   if (!pump) return "";
+  const maintenance = pump.maintenanceEvents.find((item) => item.id === state.editingMaintenanceId) ?? null;
+  const selectedType = maintenance?.type || "Preventivo";
 
   return `
     <div class="modal-backdrop" role="presentation">
       <section class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="maintenanceTitle">
         <p class="eyebrow">Intervencion</p>
-        <h3 id="maintenanceTitle">Registrar mantenimiento</h3>
+        <h3 id="maintenanceTitle">${maintenance ? "Editar mantenimiento" : "Registrar mantenimiento"}</h3>
         <p>El mantenimiento de <strong>${escapeHtml(pump.code)}</strong> quedara señalado en la grafica de vibracion.</p>
         <form id="maintenanceForm" class="maintenance-form">
           <label>
             Fecha
-            <input class="field" name="date" type="date" value="${new Date().toISOString().slice(0, 10)}" required />
+            <input class="field" name="date" type="date" value="${escapeHtml(maintenance?.date || new Date().toISOString().slice(0, 10))}" required />
           </label>
           <label>
             Tipo
             <select class="field" name="type">
-              <option>Preventivo</option>
-              <option>Correctivo</option>
-              <option>Inspeccion</option>
-              <option>Otro</option>
+              ${["Preventivo", "Correctivo", "Inspeccion", "Otro"]
+                .map((type) => `<option ${selectedType === type ? "selected" : ""}>${type}</option>`)
+                .join("")}
             </select>
           </label>
           <label class="full">
             Realizado por
-            <input class="field" name="technician" placeholder="Nombre o empresa (opcional)" />
+            <input class="field" name="technician" value="${escapeHtml(maintenance?.technician || "")}" placeholder="Nombre o empresa (opcional)" />
           </label>
           <label class="full">
             Trabajo realizado
-            <textarea class="field" name="description" placeholder="Describe brevemente la intervencion" required></textarea>
+            <textarea class="field" name="description" placeholder="Describe brevemente la intervencion" required>${escapeHtml(maintenance?.description || "")}</textarea>
           </label>
           <div class="modal-actions full">
             <button class="button secondary" type="button" id="cancelMaintenance">Cancelar</button>
-            <button class="button" type="submit">Registrar mantenimiento</button>
+            <button class="button" type="submit">${maintenance ? "Guardar cambios" : "Registrar mantenimiento"}</button>
           </div>
         </form>
+      </section>
+    </div>
+  `;
+}
+
+function renderDeleteMaintenanceModal() {
+  if (!state.pendingMaintenanceDelete) return "";
+  const pump = state.pumps.find((item) => item.id === state.pendingMaintenanceDelete.pumpId);
+  const maintenance = pump?.maintenanceEvents.find((item) => item.id === state.pendingMaintenanceDelete.maintenanceId);
+  if (!pump || !maintenance) return "";
+
+  return `
+    <div class="modal-backdrop" role="presentation">
+      <section class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="deleteMaintenanceTitle">
+        <p class="eyebrow">Confirmacion</p>
+        <h3 id="deleteMaintenanceTitle">¿Eliminar este mantenimiento?</h3>
+        <p>Se eliminara el mantenimiento de <strong>${formatDate(maintenance.date)}</strong> registrado en <strong>${escapeHtml(pump.code)}</strong>.</p>
+        <div class="modal-actions">
+          <button class="button secondary" type="button" id="cancelDeleteMaintenance">Cancelar</button>
+          <button class="button danger" type="button" id="confirmDeleteMaintenance">Eliminar mantenimiento</button>
+        </div>
       </section>
     </div>
   `;
@@ -1283,12 +1350,20 @@ function bindEvents() {
   document.querySelector("#deletePump")?.addEventListener("click", requestDeleteSelectedPump);
   document.querySelector("#resetPump")?.addEventListener("click", requestResetSelectedPump);
   document.querySelector("#registerMaintenance")?.addEventListener("click", requestMaintenance);
+  document.querySelectorAll("[data-edit-maintenance]").forEach((button) => {
+    button.addEventListener("click", () => requestEditMaintenance(button.dataset.editMaintenance));
+  });
+  document.querySelectorAll("[data-delete-maintenance]").forEach((button) => {
+    button.addEventListener("click", () => requestDeleteMaintenance(button.dataset.deleteMaintenance));
+  });
   document.querySelector("#cancelDelete")?.addEventListener("click", cancelDeletePump);
   document.querySelector("#confirmDelete")?.addEventListener("click", confirmDeletePump);
   document.querySelector("#cancelResetPump")?.addEventListener("click", cancelResetPump);
   document.querySelector("#confirmResetPump")?.addEventListener("click", confirmResetPump);
   document.querySelector("#cancelMaintenance")?.addEventListener("click", cancelMaintenance);
-  document.querySelector("#maintenanceForm")?.addEventListener("submit", addMaintenance);
+  document.querySelector("#maintenanceForm")?.addEventListener("submit", saveMaintenance);
+  document.querySelector("#cancelDeleteMaintenance")?.addEventListener("click", cancelDeleteMaintenance);
+  document.querySelector("#confirmDeleteMaintenance")?.addEventListener("click", confirmDeleteMaintenance);
   document.querySelector("#cancelImportConditions")?.addEventListener("click", cancelImportConditions);
   document.querySelector("#importConditionsForm")?.addEventListener("submit", completeMeasurementImport);
   document.querySelectorAll("[data-frequency-toggle]").forEach((toggle) => {
@@ -1337,10 +1412,12 @@ function addPump() {
     id: crypto.randomUUID(),
     code: `P-${String(400 + nextNumber).padStart(3, "0")}`,
     name: "Nueva bomba",
+    pumpType: "Centrífuga",
     area: "Sin asignar",
     aviso: "",
     alarma: "",
     motorGroup: "",
+    hasAxialMeasurement: false,
     hasVfd: false,
     lastFrequencyHz: null,
     status: "Operativa",
@@ -1369,10 +1446,12 @@ function saveSelectedPump(event) {
     ...pump,
     code: String(form.get("code") ?? "").trim(),
     name: String(form.get("name") ?? "").trim(),
+    pumpType: normalizePumpType(form.get("pumpType"), pump.name),
     area: String(form.get("area") ?? "").trim(),
     aviso: String(form.get("aviso") ?? "").trim(),
     alarma: String(form.get("alarma") ?? "").trim(),
     motorGroup: String(form.get("motorGroup") ?? "").trim(),
+    hasAxialMeasurement: form.get("hasAxialMeasurement") === "on",
     hasVfd: form.get("hasVfd") === "on",
     status: String(form.get("status") ?? "Operativa"),
   };
@@ -1413,15 +1492,25 @@ function requestMaintenance() {
   if (!pump) return;
 
   state.maintenancePumpId = pump.id;
+  state.editingMaintenanceId = null;
+  render();
+}
+
+function requestEditMaintenance(maintenanceId) {
+  const pump = selectedPump();
+  if (!pump?.maintenanceEvents.some((item) => item.id === maintenanceId)) return;
+  state.maintenancePumpId = pump.id;
+  state.editingMaintenanceId = maintenanceId;
   render();
 }
 
 function cancelMaintenance() {
   state.maintenancePumpId = null;
+  state.editingMaintenanceId = null;
   render();
 }
 
-function addMaintenance(event) {
+function saveMaintenance(event) {
   event.preventDefault();
 
   const pump = state.pumps.find((item) => item.id === state.maintenancePumpId);
@@ -1429,22 +1518,55 @@ function addMaintenance(event) {
 
   const form = new FormData(event.target);
   const maintenance = normalizeMaintenanceEvent({
-    id: crypto.randomUUID(),
+    id: state.editingMaintenanceId || crypto.randomUUID(),
     date: String(form.get("date") ?? new Date().toISOString().slice(0, 10)),
     type: String(form.get("type") ?? "Preventivo"),
     technician: String(form.get("technician") ?? "").trim(),
     description: String(form.get("description") ?? "").trim(),
   });
 
-  state.pumps = state.pumps.map((item) =>
-    item.id === pump.id ? { ...item, maintenanceEvents: [maintenance, ...item.maintenanceEvents] } : item,
-  );
+  const editing = Boolean(state.editingMaintenanceId);
+  state.pumps = state.pumps.map((item) => {
+    if (item.id !== pump.id) return item;
+    const maintenanceEvents = editing
+      ? item.maintenanceEvents.map((existing) => (existing.id === maintenance.id ? maintenance : existing))
+      : [maintenance, ...item.maintenanceEvents];
+    return { ...item, maintenanceEvents };
+  });
   state.maintenancePumpId = null;
+  state.editingMaintenanceId = null;
   state.selectedId = pump.id;
   savePumps();
   void syncSharedData();
   render();
-  showToast("Mantenimiento registrado.");
+  showToast(editing ? "Mantenimiento actualizado." : "Mantenimiento registrado.");
+}
+
+function requestDeleteMaintenance(maintenanceId) {
+  const pump = selectedPump();
+  if (!pump?.maintenanceEvents.some((item) => item.id === maintenanceId)) return;
+  state.pendingMaintenanceDelete = { pumpId: pump.id, maintenanceId };
+  render();
+}
+
+function cancelDeleteMaintenance() {
+  state.pendingMaintenanceDelete = null;
+  render();
+}
+
+function confirmDeleteMaintenance() {
+  if (!state.pendingMaintenanceDelete) return;
+  const { pumpId, maintenanceId } = state.pendingMaintenanceDelete;
+  state.pumps = state.pumps.map((pump) =>
+    pump.id === pumpId
+      ? { ...pump, maintenanceEvents: pump.maintenanceEvents.filter((item) => item.id !== maintenanceId) }
+      : pump,
+  );
+  state.pendingMaintenanceDelete = null;
+  savePumps();
+  void syncSharedData();
+  render();
+  showToast("Mantenimiento eliminado.");
 }
 
 function openFlowConfig() {
@@ -1808,10 +1930,12 @@ function mergeMeasurements(rows, conditionMap = new Map()) {
         id: crypto.randomUUID(),
         code: normalized.code,
         name: normalized.name || normalized.code,
+        pumpType: "Otra",
         area: normalized.area || "Importada",
         aviso: "",
         alarma: "",
         motorGroup: "",
+        hasAxialMeasurement: false,
         hasVfd: Boolean(condition?.hasVfd),
         lastFrequencyHz: condition?.frequencyHz ?? null,
         status: "Operativa",
@@ -2137,7 +2261,7 @@ function buildViewDataExportRows() {
   const sortedPumps = [...state.pumps].sort((a, b) => a.code.localeCompare(b.code));
 
   sortedPumps.forEach((pump) => {
-    MEASUREMENT_POINTS.forEach((point) => {
+    measurementPointsForPump(pump).forEach((point) => {
       const measurements = pump.measurements
         .map(normalizeMeasurement)
         .filter((item) => item.point === point)
