@@ -10,6 +10,7 @@ const DEFAULT_CONFIG_LOAD_FLOW_URL = "https://default65afa47b9e4e4ad28cfe30d4118
 const FILTER_STATUSES = ["Todas", "Operativa", "Aviso", "Alarma", "Parada"];
 const MANUAL_STATUSES = ["Operativa", "Parada"];
 const MEASUREMENT_POINTS = ["B-LA", "B-LOA", "M-LA", "M-LOA"];
+const MOTOR_MEASUREMENT_POINTS = new Set(["M-LA", "M-LOA"]);
 const POINT_COLORS = {
   "B-LA": "#0f766e",
   "B-LOA": "#2563eb",
@@ -173,6 +174,7 @@ function normalizePump(pump) {
     area: pump.area ?? "Sin asignar",
     aviso: pump.aviso ?? "",
     alarma: pump.alarma ?? "",
+    motorGroup: String(pump.motorGroup ?? "").trim(),
     hasVfd: Boolean(pump.hasVfd),
     lastFrequencyHz: parseOptionalNumber(pump.lastFrequencyHz),
     status: normalizeStatus(pump.status),
@@ -494,6 +496,7 @@ function renderPumpRow(pump) {
           <span class="tag">${pump.incidents.length} incid.</span>
           <span class="tag">${pump.maintenanceEvents.length} mant.</span>
           ${pump.hasVfd ? `<span class="tag">Variador</span>` : ""}
+          ${pump.motorGroup ? `<span class="tag">Motor ${escapeHtml(pump.motorGroup)}</span>` : ""}
         </div>
       </div>
       <span class="status-dot ${status}" aria-hidden="true"></span>
@@ -553,6 +556,17 @@ function renderDetail(pump) {
         <label>
           Alarma
           <input class="field" name="alarma" type="number" step="0.01" min="0" inputmode="decimal" value="${escapeHtml(pump.alarma ?? "")}" />
+        </label>
+        <label class="full">
+          Grupo de motor compartido
+          <input class="field" name="motorGroup" list="motorGroupOptions" value="${escapeHtml(pump.motorGroup ?? "")}" placeholder="Ej. MOTOR-101" />
+          <small>Usa exactamente el mismo grupo en todas las bombas que compartan este motor.</small>
+          <datalist id="motorGroupOptions">
+            ${[...new Set(state.pumps.map((item) => item.motorGroup).filter(Boolean))]
+              .sort((a, b) => a.localeCompare(b, "es", { numeric: true, sensitivity: "base" }))
+              .map((group) => `<option value="${escapeHtml(group)}"></option>`)
+              .join("")}
+          </datalist>
         </label>
         <label>
           Estado operativo
@@ -1326,6 +1340,7 @@ function addPump() {
     area: "Sin asignar",
     aviso: "",
     alarma: "",
+    motorGroup: "",
     hasVfd: false,
     lastFrequencyHz: null,
     status: "Operativa",
@@ -1357,6 +1372,7 @@ function saveSelectedPump(event) {
     area: String(form.get("area") ?? "").trim(),
     aviso: String(form.get("aviso") ?? "").trim(),
     alarma: String(form.get("alarma") ?? "").trim(),
+    motorGroup: String(form.get("motorGroup") ?? "").trim(),
     hasVfd: form.get("hasVfd") === "on",
     status: String(form.get("status") ?? "Operativa"),
   };
@@ -1529,15 +1545,20 @@ async function completeMeasurementImport(event) {
     savePumps();
     saveViewDataBlocks();
     void syncSharedData();
-    if (!result.measurements) {
+    if (!result.measurements && !result.sharedMeasurements) {
       state.importMessage = "No se encontraron medidas nuevas; las lecturas ya estaban importadas.";
       render();
       showToast("No había medidas nuevas.");
       return;
     }
-    state.importMessage = `Importacion correcta: ${result.measurements} medidas Velocity RMS en ${result.pumps} bombas. Excel historico actualizado con ${viewDataResult.rows} filas completas de ViewData.`;
+    const sharedMessage = result.sharedMeasurements
+      ? ` ${result.sharedMeasurements} medidas de motor replicadas en bombas vinculadas.`
+      : "";
+    state.importMessage = `Importacion correcta: ${result.measurements} medidas Velocity RMS leidas del archivo en ${result.pumps} bombas.${sharedMessage} Excel historico actualizado con ${viewDataResult.rows} filas completas de ViewData.`;
     render();
-    showToast(`${result.measurements} medidas importadas en ${result.pumps} bombas.`);
+    showToast(
+      `${result.measurements} medidas importadas${result.sharedMeasurements ? ` y ${result.sharedMeasurements} de motor replicadas` : ""}.`,
+    );
     await updateSharePointExcel();
   } catch (error) {
     state.pendingImportData = null;
@@ -1773,6 +1794,7 @@ function splitCsvLine(line, separator) {
 
 function mergeMeasurements(rows, conditionMap = new Map()) {
   let importedMeasurements = 0;
+  let sharedMeasurements = 0;
   const touchedPumps = new Set();
 
   for (const row of rows) {
@@ -1789,6 +1811,7 @@ function mergeMeasurements(rows, conditionMap = new Map()) {
         area: normalized.area || "Importada",
         aviso: "",
         alarma: "",
+        motorGroup: "",
         hasVfd: Boolean(condition?.hasVfd),
         lastFrequencyHz: condition?.frequencyHz ?? null,
         status: "Operativa",
@@ -1811,26 +1834,22 @@ function mergeMeasurements(rows, conditionMap = new Map()) {
       source: "Fluke 805 FC",
     };
 
-    const existingMeasurement = pump.measurements.find(
-      (item) =>
-        item.date === measurement.date &&
-        item.dateTime === measurement.dateTime &&
-        item.point === measurement.point &&
-        Number(item.vibration) === Number(measurement.vibration),
-    );
-    if (existingMeasurement) {
-      if (existingMeasurement.cfPlus === null || existingMeasurement.cfPlus === undefined) {
-        existingMeasurement.cfPlus = measurement.cfPlus;
-      }
-      if (existingMeasurement.frequencyHz === null || existingMeasurement.frequencyHz === undefined) {
-        existingMeasurement.frequencyHz = measurement.frequencyHz;
-      }
-      continue;
+    if (mergeMeasurementIntoPump(pump, measurement)) {
+      touchedPumps.add(pump.id);
+      importedMeasurements += 1;
     }
 
-    pump.measurements.push(measurement);
-    touchedPumps.add(pump.id);
-    importedMeasurements += 1;
+    if (!MOTOR_MEASUREMENT_POINTS.has(measurement.point) || !pump.motorGroup) continue;
+
+    const motorGroupKey = pump.motorGroup.trim().toLowerCase();
+    state.pumps
+      .filter((item) => item.id !== pump.id && item.motorGroup.trim().toLowerCase() === motorGroupKey)
+      .forEach((linkedPump) => {
+        const sharedMeasurement = { ...measurement, id: crypto.randomUUID() };
+        if (!mergeMeasurementIntoPump(linkedPump, sharedMeasurement)) return;
+        touchedPumps.add(linkedPump.id);
+        sharedMeasurements += 1;
+      });
   }
 
   state.pumps = state.pumps.map((pump) => {
@@ -1838,7 +1857,29 @@ function mergeMeasurements(rows, conditionMap = new Map()) {
     return { ...pump, measurements: pump.measurements.sort((a, b) => a.date.localeCompare(b.date)) };
   });
 
-  return { measurements: importedMeasurements, pumps: touchedPumps.size };
+  return { measurements: importedMeasurements, sharedMeasurements, pumps: touchedPumps.size };
+}
+
+function mergeMeasurementIntoPump(pump, measurement) {
+  const existingMeasurement = pump.measurements.find(
+    (item) =>
+      item.date === measurement.date &&
+      item.dateTime === measurement.dateTime &&
+      item.point === measurement.point &&
+      Number(item.vibration) === Number(measurement.vibration),
+  );
+  if (!existingMeasurement) {
+    pump.measurements.push(measurement);
+    return true;
+  }
+
+  if (existingMeasurement.cfPlus === null || existingMeasurement.cfPlus === undefined) {
+    existingMeasurement.cfPlus = measurement.cfPlus;
+  }
+  if (existingMeasurement.frequencyHz === null || existingMeasurement.frequencyHz === undefined) {
+    existingMeasurement.frequencyHz = measurement.frequencyHz;
+  }
+  return false;
 }
 
 function mergeViewDataBlocks(blocks) {
