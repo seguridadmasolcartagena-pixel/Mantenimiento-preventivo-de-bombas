@@ -7,8 +7,8 @@ const SHAREPOINT_CONFIG_LOAD_URL_KEY = "gestor-bombas-config-load-flow-url";
 const DEFAULT_SHAREPOINT_FLOW_URL = "https://default65afa47b9e4e4ad28cfe30d4118f06.2e.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/15/workflows/95bc65b247164e0a804736dc195482c9/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=8PRtUuxOM1R2WhMXrnYmkGHdTiIMxO8i7exY-jREaNY";
 const DEFAULT_CONFIG_SAVE_FLOW_URL = "https://default65afa47b9e4e4ad28cfe30d4118f06.2e.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/17/workflows/700af3db16a142d5a2799fc8d21c5d41/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=lua5kSvn1VtD5lRZgHNkv6e9zpkWd6oieNrbJMx6xO8";
 const DEFAULT_CONFIG_LOAD_FLOW_URL = "https://default65afa47b9e4e4ad28cfe30d4118f06.2e.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/29/workflows/d6a6f47846c4459c82242e000ac1c256/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=3sYKAXENMKBE6W-Mw8v59t_lryukYAWg2DtW-DFYPVQ";
-const FILTER_STATUSES = ["Todas", "Operativa", "Aviso", "Alarma", "Parada"];
-const MANUAL_STATUSES = ["Operativa", "Parada"];
+const FILTER_STATUSES = ["Todas", "Operativa", "Aviso", "Alarma", "Mantenimiento", "Parada"];
+const MANUAL_STATUSES = ["Operativa", "Mantenimiento", "Parada"];
 const PUMP_TYPES = ["Centrífuga", "Pistón", "Engranajes", "Tornillo", "Lóbulos", "Diafragma", "Otra"];
 const STANDARD_MEASUREMENT_POINTS = ["B-LA", "B-LOA", "M-LA", "M-LOA"];
 const PISTON_MEASUREMENT_POINTS = ["M-LA", "M-LOA", "R", "A", "B"];
@@ -331,13 +331,14 @@ function normalizeStatus(status) {
   if (status === "En observacion") return "Aviso";
   if (status === "Alarma") return "Alarma";
   if (status === "Aviso") return "Aviso";
+  if (status === "Mantenimiento") return "Mantenimiento";
   if (status === "Parada") return "Parada";
   return "Operativa";
 }
 
 function calculatedPumpStatus(pump) {
   const baseStatus = normalizeStatus(pump.status);
-  if (baseStatus === "Parada") return "Parada";
+  if (baseStatus === "Parada" || baseStatus === "Mantenimiento") return baseStatus;
 
   const latestByPoint = latestMeasurementsByPoint(pump);
   const latestValues = Object.values(latestByPoint)
@@ -398,6 +399,7 @@ function statusClass(status) {
   if (status === "Operativa") return "ok";
   if (status === "Aviso") return "warn";
   if (status === "Alarma") return "alarm";
+  if (status === "Mantenimiento") return "maintenance";
   return "stop";
 }
 
@@ -644,14 +646,6 @@ function renderDetail(pump) {
 
       <section class="history-section">
         <div class="section-heading">
-          <h4>Vibracion frente a frecuencia</h4>
-          <span>Comparacion de regimenes de operacion</span>
-        </div>
-        ${renderFrequencyChart(pump)}
-      </section>
-
-      <section class="history-section">
-        <div class="section-heading">
           <h4>Evolucion de CF+</h4>
           <span>Indicador de condicion del rodamiento</span>
         </div>
@@ -857,62 +851,6 @@ function renderChart(pump, selectedBand = "all") {
       </g>
       <text x="${pad}" y="${height - 8}">${escapeHtml(dates[0])}</text>
       <text x="${width - pad}" y="${height - 8}" text-anchor="end">${escapeHtml(dates.at(-1))}</text>
-    </svg>
-  `;
-}
-
-function renderFrequencyChart(pump) {
-  const measurementPoints = measurementPointsForPump(pump);
-  const items = pump.measurements
-    .map(normalizeMeasurement)
-    .filter((item) => measurementPoints.includes(item.point) && item.frequencyHz !== null);
-  if (items.length < 2) {
-    return `<div class="empty-inline">Se necesitan al menos dos mediciones con frecuencia para mostrar esta comparacion.</div>`;
-  }
-
-  const width = 680;
-  const height = 240;
-  const pad = 42;
-  const frequencies = items.map((item) => item.frequencyHz);
-  const minFrequency = Math.min(...frequencies);
-  const maxFrequency = Math.max(...frequencies);
-  const maxVibration = Math.max(1, ...items.map((item) => item.vibration));
-  const yTicks = Array.from({ length: 5 }, (_, index) => {
-    const value = (maxVibration * (4 - index)) / 4;
-    return { value, y: pad + (index * (height - pad * 2)) / 4 };
-  });
-  const formatVibrationAxisValue = (value) => (maxVibration <= 10 ? value.toFixed(2) : value.toFixed(1));
-  const xForFrequency = (value) =>
-    minFrequency === maxFrequency ? width / 2 : pad + ((value - minFrequency) / (maxFrequency - minFrequency)) * (width - pad * 2);
-  const yForVibration = (value) => height - pad - (value / maxVibration) * (height - pad * 2);
-
-  return `
-    <svg class="chart frequency-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Vibracion frente a frecuencia">
-      ${yTicks
-        .map(
-          (tick) => `
-            <g class="axis-tick">
-              <line x1="${pad}" y1="${tick.y.toFixed(1)}" x2="${width - pad}" y2="${tick.y.toFixed(1)}" style="stroke: #e1e6df; stroke-width: 1" />
-              <text x="${pad - 7}" y="${(tick.y + 4).toFixed(1)}" text-anchor="end">${formatVibrationAxisValue(tick.value)}</text>
-            </g>
-          `,
-        )
-        .join("")}
-      <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" />
-      <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}" />
-      ${items
-        .map(
-          (item) => `
-            <g>
-              <title>${escapeHtml(`${formatDate(item.date)} · ${item.point} · ${item.frequencyHz} Hz · ${item.vibration} ${item.unit}`)}</title>
-              <circle cx="${xForFrequency(item.frequencyHz).toFixed(1)}" cy="${yForVibration(item.vibration).toFixed(1)}" r="5" style="stroke: ${POINT_COLORS[item.point]}" />
-            </g>
-          `,
-        )
-        .join("")}
-      <text x="${pad}" y="${height - 10}">${minFrequency} Hz</text>
-      <text x="${width - pad}" y="${height - 10}" text-anchor="end">${maxFrequency} Hz</text>
-      <text x="${pad + 4}" y="${pad - 10}">mm/s</text>
     </svg>
   `;
 }
