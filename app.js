@@ -559,7 +559,7 @@ function renderDetail(pump) {
         </label>
         <label class="full">
           Grupo de motor compartido
-          <input class="field" name="motorGroup" list="motorGroupOptions" value="${escapeHtml(pump.motorGroup ?? "")}" placeholder="Ej. MOTOR-101" />
+          <input class="field" name="motorGroup" list="motorGroupOptions" value="${escapeHtml(pump.motorGroup ?? "")}" />
           <small>Usa exactamente el mismo grupo en todas las bombas que compartan este motor.</small>
           <datalist id="motorGroupOptions">
             ${[...new Set(state.pumps.map((item) => item.motorGroup).filter(Boolean))]
