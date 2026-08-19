@@ -18,13 +18,20 @@ Aplicacion web estatica para consultar el historial de vibraciones e incidencias
 - Reseteo de las medidas activas de una bomba con confirmacion previa, conservando el historico maestro.
 - Potencia nominal en kW por bomba y recomendacion automatica de umbrales de Aviso y Alarma, siempre editables manualmente.
 
-## Umbrales orientativos por tipo y potencia
+## Umbrales de la tabla de referencia
 
-Al indicar o cambiar el tipo de bomba y su potencia, la ficha propone valores de velocidad RMS en mm/s. El usuario puede sustituirlos antes de guardar o volver a aplicar la recomendacion mediante el boton correspondiente.
+La recomendacion automatica reproduce la tabla facilitada para bombas radial, axial o diagonal de mas de 15 kW. Ademas del tipo y la potencia, la ficha solicita la transmision y el tipo de fundacion porque ambos cambian los limites.
 
-La regla interna usa bandas de severidad de 1,8/4,5; 2,8/7,1 y 4,5/11,2 mm/s para las clases I, II y III. La potencia selecciona la clase base: hasta 15 kW, de mas de 15 a 75 kW y mas de 75 kW. Las bombas rotativas de desplazamiento positivo parten como minimo de clase II y las de movimiento alternativo como minimo de clase III para reducir avisos espurios por su comportamiento pulsante.
+| Transmision | Fundacion | Grupo | Aviso amarillo | Alarma roja |
+| --- | --- | --- | ---: | ---: |
+| Acople directo | Rigida | Grupo 4 | 2,8 mm/s RMS | 4,5 mm/s RMS |
+| Acople directo | Flexible | Grupo 4 | 3,5 mm/s RMS | 4,5 mm/s RMS |
+| Eje intermedio / Poleas | Rigida | Grupo 3 | 3,5 mm/s RMS | 4,5 mm/s RMS |
+| Eje intermedio / Poleas | Flexible | Grupo 3 | 4,5 mm/s RMS | 7,1 mm/s RMS |
 
-Estos valores son orientativos. No sustituyen los limites del fabricante, la evaluacion del montaje, la tendencia historica ni los procedimientos de mantenimiento y seguridad de la planta.
+Para bombas no incluidas en la tabla o con potencia igual o inferior a 15 kW no se inventa una recomendacion: los campos permanecen disponibles para introducir los limites manuales. El usuario tambien puede sustituir cualquier recomendacion antes de guardar o volver a aplicarla mediante el boton correspondiente.
+
+Los valores no sustituyen los limites del fabricante, la evaluacion del montaje, la tendencia historica ni los procedimientos de mantenimiento y seguridad de la planta.
 
 ## Uso
 
