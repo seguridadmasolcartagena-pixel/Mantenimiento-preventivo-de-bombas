@@ -16,6 +16,15 @@ Aplicacion web estatica para consultar el historial de vibraciones e incidencias
 - Registro manual de incidencias por operario.
 - Eliminacion de bombas con confirmacion previa.
 - Reseteo de las medidas activas de una bomba con confirmacion previa, conservando el historico maestro.
+- Potencia nominal en kW por bomba y recomendacion automatica de umbrales de Aviso y Alarma, siempre editables manualmente.
+
+## Umbrales orientativos por tipo y potencia
+
+Al indicar o cambiar el tipo de bomba y su potencia, la ficha propone valores de velocidad RMS en mm/s. El usuario puede sustituirlos antes de guardar o volver a aplicar la recomendacion mediante el boton correspondiente.
+
+La regla interna usa bandas de severidad de 1,8/4,5; 2,8/7,1 y 4,5/11,2 mm/s para las clases I, II y III. La potencia selecciona la clase base: hasta 15 kW, de mas de 15 a 75 kW y mas de 75 kW. Las bombas rotativas de desplazamiento positivo parten como minimo de clase II y las de movimiento alternativo como minimo de clase III para reducir avisos espurios por su comportamiento pulsante.
+
+Estos valores son orientativos. No sustituyen los limites del fabricante, la evaluacion del montaje, la tendencia historica ni los procedimientos de mantenimiento y seguridad de la planta.
 
 ## Uso
 
