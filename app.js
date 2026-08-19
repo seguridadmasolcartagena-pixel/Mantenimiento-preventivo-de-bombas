@@ -1,3 +1,5 @@
+import { recommendedThresholds } from "./thresholds.js";
+
 const STORAGE_KEY = "gestor-bombas-v3";
 const VIEWDATA_STORAGE_KEY = "gestor-bombas-viewdata-v1";
 const LOCAL_UPDATED_AT_KEY = "gestor-bombas-local-updated-at-v1";
@@ -181,6 +183,7 @@ function normalizePump(pump) {
     code: pump.code ?? "",
     name: pump.name ?? "Bomba sin nombre",
     pumpType: normalizePumpType(pump.pumpType, pump.name),
+    powerKw: parseOptionalNumber(pump.powerKw),
     area: pump.area ?? "Sin asignar",
     aviso: pump.aviso ?? "",
     alarma: pump.alarma ?? "",
@@ -523,6 +526,7 @@ function renderPumpRow(pump) {
           <span class="tag">${pump.incidents.length} incid.</span>
           <span class="tag">${pump.maintenanceEvents.length} mant.</span>
           <span class="tag">${escapeHtml(pump.pumpType)}</span>
+          ${pump.powerKw === null ? "" : `<span class="tag">${pump.powerKw} kW</span>`}
           ${pump.hasVfd ? `<span class="tag">Variador</span>` : ""}
           ${pump.hasAxialMeasurement ? `<span class="tag">M-AX</span>` : ""}
           ${pump.motorGroup ? `<span class="tag">Motor ${escapeHtml(pump.motorGroup)}</span>` : ""}
@@ -575,7 +579,7 @@ function renderDetail(pump) {
           Area
           <input class="field" name="area" value="${escapeHtml(pump.area)}" required />
         </label>
-        <label>
+        <label class="full">
           Nombre / descripción
           <input class="field" name="name" value="${escapeHtml(pump.name)}" required />
         </label>
@@ -586,13 +590,21 @@ function renderDetail(pump) {
           </select>
         </label>
         <label>
-          Aviso
+          Potencia
+          <div class="field-with-unit">
+            <input class="field" name="powerKw" type="number" step="0.01" min="0" inputmode="decimal" value="${escapeHtml(pump.powerKw ?? "")}" placeholder="Ej. 15" />
+            <span>kW</span>
+          </div>
+        </label>
+        <label>
+          Aviso (mm/s RMS)
           <input class="field" name="aviso" type="number" step="0.01" min="0" inputmode="decimal" value="${escapeHtml(pump.aviso ?? "")}" />
         </label>
         <label>
-          Alarma
+          Alarma (mm/s RMS)
           <input class="field" name="alarma" type="number" step="0.01" min="0" inputmode="decimal" value="${escapeHtml(pump.alarma ?? "")}" />
         </label>
+        ${renderThresholdRecommendation(pump)}
         <label class="full">
           Grupo de motor compartido
           <input class="field" name="motorGroup" list="motorGroupOptions" value="${escapeHtml(pump.motorGroup ?? "")}" />
@@ -676,6 +688,23 @@ function renderDetail(pump) {
         ${renderIncidentForm()}
         ${renderIncidents(pump.incidents)}
       </section>
+    </div>
+  `;
+}
+
+function renderThresholdRecommendation(pump) {
+  const recommendation = recommendedThresholds(pump.pumpType, pump.powerKw);
+  const message = recommendation
+    ? `Recomendación: Aviso ${recommendation.aviso} y Alarma ${recommendation.alarma} mm/s RMS (${recommendation.profile}; ${recommendation.basis}).`
+    : "Indica la potencia para calcular los valores recomendados de Aviso y Alarma.";
+
+  return `
+    <div class="threshold-recommendation full" id="thresholdRecommendation">
+      <div>
+        <strong>Umbrales orientativos</strong>
+        <span>${escapeHtml(message)} Los campos permanecen editables.</span>
+      </div>
+      <button class="button secondary button-small" type="button" id="applyRecommendedThresholds" ${recommendation ? "" : "disabled"}>Aplicar recomendación</button>
     </div>
   `;
 }
@@ -1321,6 +1350,9 @@ function bindEvents() {
   document.querySelector("#cancelResetHistory")?.addEventListener("click", cancelResetHistory);
   document.querySelector("#confirmResetHistory")?.addEventListener("click", confirmResetHistory);
   document.querySelector("#pumpForm")?.addEventListener("submit", saveSelectedPump);
+  document.querySelector("#pumpForm [name='pumpType']")?.addEventListener("change", applyThresholdRecommendation);
+  document.querySelector("#pumpForm [name='powerKw']")?.addEventListener("change", applyThresholdRecommendation);
+  document.querySelector("#applyRecommendedThresholds")?.addEventListener("click", applyThresholdRecommendation);
   document.querySelector("#incidentForm")?.addEventListener("submit", addIncident);
   document.querySelector("#importMeasures")?.addEventListener("click", () => document.querySelector("#measureFile")?.click());
   document.querySelector("#measureFile")?.addEventListener("change", importMeasurements);
@@ -1351,6 +1383,7 @@ function addPump() {
     code: `P-${String(400 + nextNumber).padStart(3, "0")}`,
     name: "Nueva bomba",
     pumpType: "Centrífuga",
+    powerKw: null,
     area: "Sin asignar",
     aviso: "",
     alarma: "",
@@ -1385,6 +1418,7 @@ function saveSelectedPump(event) {
     code: String(form.get("code") ?? "").trim(),
     name: String(form.get("name") ?? "").trim(),
     pumpType: normalizePumpType(form.get("pumpType"), pump.name),
+    powerKw: parseOptionalNumber(form.get("powerKw")),
     area: String(form.get("area") ?? "").trim(),
     aviso: String(form.get("aviso") ?? "").trim(),
     alarma: String(form.get("alarma") ?? "").trim(),
@@ -1399,6 +1433,30 @@ function saveSelectedPump(event) {
   syncSharedData();
   render();
   showToast("Cambios guardados.");
+}
+
+function applyThresholdRecommendation() {
+  const form = document.querySelector("#pumpForm");
+  if (!form) return;
+
+  const pumpType = normalizePumpType(form.elements.pumpType?.value);
+  const powerKw = parseOptionalNumber(form.elements.powerKw?.value);
+  const recommendation = recommendedThresholds(pumpType, powerKw);
+  const note = document.querySelector("#thresholdRecommendation span");
+  const button = document.querySelector("#applyRecommendedThresholds");
+
+  if (!recommendation) {
+    if (note) note.textContent = "Indica una potencia mayor que cero para calcular los umbrales.";
+    if (button) button.disabled = true;
+    return;
+  }
+
+  form.elements.aviso.value = recommendation.aviso;
+  form.elements.alarma.value = recommendation.alarma;
+  if (note) {
+    note.textContent = `Aplicados Aviso ${recommendation.aviso} y Alarma ${recommendation.alarma} mm/s RMS (${recommendation.profile}; ${recommendation.basis}). Puedes modificarlos manualmente antes de guardar.`;
+  }
+  if (button) button.disabled = false;
 }
 
 function addIncident(event) {
@@ -1869,6 +1927,7 @@ function mergeMeasurements(rows, conditionMap = new Map()) {
         code: normalized.code,
         name: normalized.name || normalized.code,
         pumpType: "Otra",
+        powerKw: null,
         area: normalized.area || "Importada",
         aviso: "",
         alarma: "",
