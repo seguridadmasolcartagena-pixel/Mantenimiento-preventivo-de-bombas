@@ -184,10 +184,9 @@ function normalizePump(pump) {
     name: pump.name ?? "Bomba sin nombre",
     pumpType: normalizePumpType(pump.pumpType, pump.name),
     powerKw: parseOptionalNumber(pump.powerKw),
-    driveType: normalizeDriveType(pump.driveType),
     area: pump.area ?? "Sin asignar",
-    aviso: pump.aviso ?? "",
-    alarma: pump.alarma ?? "",
+    aviso: String(pump.aviso ?? "").trim() || "4",
+    alarma: String(pump.alarma ?? "").trim() || "6",
     motorGroup: String(pump.motorGroup ?? "").trim(),
     hasAxialMeasurement: Boolean(pump.hasAxialMeasurement),
     hasVfd: Boolean(pump.hasVfd),
@@ -228,10 +227,6 @@ function normalizePumpType(value, name = "") {
   const match = PUMP_TYPES.find((type) => cleanKey(type) === cleanKey(requested));
   if (match) return match;
   return cleanKey(name).includes("piston") ? "Pistón" : "Otra";
-}
-
-function normalizeDriveType(value) {
-  return ["Acople directo", "Eje intermedio / Poleas"].includes(value) ? value : "";
 }
 
 function measurementPointsForPump(pump) {
@@ -602,14 +597,6 @@ function renderDetail(pump) {
           </div>
         </label>
         <label>
-          Transmisión
-          <select class="field" name="driveType">
-            <option value="">Seleccionar</option>
-            <option value="Acople directo" ${pump.driveType === "Acople directo" ? "selected" : ""}>Acople directo</option>
-            <option value="Eje intermedio / Poleas" ${pump.driveType === "Eje intermedio / Poleas" ? "selected" : ""}>Eje intermedio / Poleas</option>
-          </select>
-        </label>
-        <label>
           Aviso (mm/s RMS)
           <input class="field" name="aviso" type="number" step="0.01" min="0" inputmode="decimal" value="${escapeHtml(pump.aviso ?? "")}" />
         </label>
@@ -706,10 +693,11 @@ function renderDetail(pump) {
 }
 
 function renderThresholdRecommendation(pump) {
-  const recommendation = recommendedThresholds(pump.pumpType, pump.powerKw, pump.driveType);
-  const message = recommendation
-    ? `Recomendación: Aviso ${recommendation.aviso} y Alarma ${recommendation.alarma} mm/s RMS (${recommendation.profile}; ${recommendation.basis}).`
-    : thresholdReferenceMessage(pump.pumpType, pump.powerKw, pump.driveType);
+  const recommendation = recommendedThresholds();
+  const isReference = Number(pump.aviso) === recommendation.aviso && Number(pump.alarma) === recommendation.alarma;
+  const message = isReference
+    ? `Referencia aplicada: Aviso ${recommendation.aviso} y Alarma ${recommendation.alarma} mm/s RMS.`
+    : `Referencia general: Aviso ${recommendation.aviso} y Alarma ${recommendation.alarma} mm/s RMS. Esta bomba tiene un ajuste manual.`;
 
   return `
     <div class="threshold-recommendation full" id="thresholdRecommendation">
@@ -717,17 +705,9 @@ function renderThresholdRecommendation(pump) {
         <strong>Umbrales orientativos</strong>
         <span>${escapeHtml(message)} Los campos permanecen editables.</span>
       </div>
-      <button class="button secondary button-small" type="button" id="applyRecommendedThresholds" ${recommendation ? "" : "disabled"}>Aplicar recomendación</button>
+      <button class="button secondary button-small" type="button" id="applyRecommendedThresholds">Aplicar referencia 4/6</button>
     </div>
   `;
-}
-
-function thresholdReferenceMessage(pumpType, powerKw, driveType) {
-  if (pumpType !== "Centrífuga") return "La tabla aportada solo cubre bombas radial, axial o diagonal; mantén los umbrales manuales para este tipo.";
-  if (powerKw === null) return "Indica la potencia para comprobar si la tabla de referencia es aplicable.";
-  if (powerKw <= 15) return "La tabla aportada solo cubre bombas de más de 15 kW; mantén los umbrales manuales.";
-  if (!driveType) return "Selecciona la transmisión para calcular Aviso (amarillo) y Alarma (rojo). Se aplica fundación rígida.";
-  return "No hay una combinación válida para calcular los umbrales.";
 }
 
 function renderPointSummary(point, item) {
@@ -1371,9 +1351,6 @@ function bindEvents() {
   document.querySelector("#cancelResetHistory")?.addEventListener("click", cancelResetHistory);
   document.querySelector("#confirmResetHistory")?.addEventListener("click", confirmResetHistory);
   document.querySelector("#pumpForm")?.addEventListener("submit", saveSelectedPump);
-  document.querySelector("#pumpForm [name='pumpType']")?.addEventListener("change", applyThresholdRecommendation);
-  document.querySelector("#pumpForm [name='powerKw']")?.addEventListener("change", applyThresholdRecommendation);
-  document.querySelector("#pumpForm [name='driveType']")?.addEventListener("change", applyThresholdRecommendation);
   document.querySelector("#applyRecommendedThresholds")?.addEventListener("click", applyThresholdRecommendation);
   document.querySelector("#incidentForm")?.addEventListener("submit", addIncident);
   document.querySelector("#importMeasures")?.addEventListener("click", () => document.querySelector("#measureFile")?.click());
@@ -1406,10 +1383,9 @@ function addPump() {
     name: "Nueva bomba",
     pumpType: "Centrífuga",
     powerKw: null,
-    driveType: "",
     area: "Sin asignar",
-    aviso: "",
-    alarma: "",
+    aviso: "4",
+    alarma: "6",
     motorGroup: "",
     hasAxialMeasurement: false,
     hasVfd: false,
@@ -1442,7 +1418,6 @@ function saveSelectedPump(event) {
     name: String(form.get("name") ?? "").trim(),
     pumpType: normalizePumpType(form.get("pumpType"), pump.name),
     powerKw: parseOptionalNumber(form.get("powerKw")),
-    driveType: normalizeDriveType(form.get("driveType")),
     area: String(form.get("area") ?? "").trim(),
     aviso: String(form.get("aviso") ?? "").trim(),
     alarma: String(form.get("alarma") ?? "").trim(),
@@ -1463,25 +1438,14 @@ function applyThresholdRecommendation() {
   const form = document.querySelector("#pumpForm");
   if (!form) return;
 
-  const pumpType = normalizePumpType(form.elements.pumpType?.value);
-  const powerKw = parseOptionalNumber(form.elements.powerKw?.value);
-  const driveType = normalizeDriveType(form.elements.driveType?.value);
-  const recommendation = recommendedThresholds(pumpType, powerKw, driveType);
+  const recommendation = recommendedThresholds();
   const note = document.querySelector("#thresholdRecommendation span");
-  const button = document.querySelector("#applyRecommendedThresholds");
-
-  if (!recommendation) {
-    if (note) note.textContent = thresholdReferenceMessage(pumpType, powerKw, driveType);
-    if (button) button.disabled = true;
-    return;
-  }
 
   form.elements.aviso.value = recommendation.aviso;
   form.elements.alarma.value = recommendation.alarma;
   if (note) {
-    note.textContent = `Aplicados Aviso ${recommendation.aviso} y Alarma ${recommendation.alarma} mm/s RMS (${recommendation.profile}; ${recommendation.basis}). Puedes modificarlos manualmente antes de guardar.`;
+    note.textContent = `Aplicados Aviso ${recommendation.aviso} y Alarma ${recommendation.alarma} mm/s RMS. Puedes modificarlos manualmente antes de guardar.`;
   }
-  if (button) button.disabled = false;
 }
 
 function addIncident(event) {
@@ -1953,10 +1917,9 @@ function mergeMeasurements(rows, conditionMap = new Map()) {
         name: normalized.name || normalized.code,
         pumpType: "Otra",
         powerKw: null,
-        driveType: "",
         area: normalized.area || "Importada",
-        aviso: "",
-        alarma: "",
+        aviso: "4",
+        alarma: "6",
         motorGroup: "",
         hasAxialMeasurement: false,
         hasVfd: Boolean(condition?.hasVfd),
