@@ -20,14 +20,12 @@ Aplicacion web estatica para consultar el historial de vibraciones e incidencias
 
 ## Umbrales de la tabla de referencia
 
-La recomendacion automatica reproduce la tabla facilitada para bombas radial, axial o diagonal de mas de 15 kW. Ademas del tipo y la potencia, la ficha solicita la transmision y el tipo de fundacion porque ambos cambian los limites.
+La recomendacion automatica reproduce la tabla facilitada para bombas radial, axial o diagonal de mas de 15 kW. Todas las bombas de la aplicacion se consideran instaladas sobre fundacion rigida, por lo que la ficha solo solicita el tipo de transmision.
 
 | Transmision | Fundacion | Grupo | Aviso amarillo | Alarma roja |
 | --- | --- | --- | ---: | ---: |
 | Acople directo | Rigida | Grupo 4 | 2,8 mm/s RMS | 4,5 mm/s RMS |
-| Acople directo | Flexible | Grupo 4 | 3,5 mm/s RMS | 4,5 mm/s RMS |
 | Eje intermedio / Poleas | Rigida | Grupo 3 | 3,5 mm/s RMS | 4,5 mm/s RMS |
-| Eje intermedio / Poleas | Flexible | Grupo 3 | 4,5 mm/s RMS | 7,1 mm/s RMS |
 
 Para bombas no incluidas en la tabla o con potencia igual o inferior a 15 kW no se inventa una recomendacion: los campos permanecen disponibles para introducir los limites manuales. El usuario tambien puede sustituir cualquier recomendacion antes de guardar o volver a aplicarla mediante el boton correspondiente.
 
