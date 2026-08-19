@@ -16,6 +16,20 @@ Aplicacion web estatica para consultar el historial de vibraciones e incidencias
 - Registro manual de incidencias por operario.
 - Eliminacion de bombas con confirmacion previa.
 - Reseteo de las medidas activas de una bomba con confirmacion previa, conservando el historico maestro.
+- Potencia nominal en kW por bomba y recomendacion automatica de umbrales de Aviso y Alarma, siempre editables manualmente.
+
+## Umbrales de la tabla de referencia
+
+La recomendacion automatica reproduce la tabla facilitada para bombas radial, axial o diagonal de mas de 15 kW. Todas las bombas de la aplicacion se consideran instaladas sobre fundacion rigida, por lo que la ficha solo solicita el tipo de transmision.
+
+| Transmision | Fundacion | Grupo | Aviso amarillo | Alarma roja |
+| --- | --- | --- | ---: | ---: |
+| Acople directo | Rigida | Grupo 4 | 2,8 mm/s RMS | 4,5 mm/s RMS |
+| Eje intermedio / Poleas | Rigida | Grupo 3 | 3,5 mm/s RMS | 4,5 mm/s RMS |
+
+Para bombas no incluidas en la tabla o con potencia igual o inferior a 15 kW no se inventa una recomendacion: los campos permanecen disponibles para introducir los limites manuales. El usuario tambien puede sustituir cualquier recomendacion antes de guardar o volver a aplicarla mediante el boton correspondiente.
+
+Los valores no sustituyen los limites del fabricante, la evaluacion del montaje, la tendencia historica ni los procedimientos de mantenimiento y seguridad de la planta.
 
 ## Uso
 
