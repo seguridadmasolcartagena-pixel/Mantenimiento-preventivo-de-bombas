@@ -184,6 +184,8 @@ function normalizePump(pump) {
     name: pump.name ?? "Bomba sin nombre",
     pumpType: normalizePumpType(pump.pumpType, pump.name),
     powerKw: parseOptionalNumber(pump.powerKw),
+    driveType: normalizeDriveType(pump.driveType),
+    foundationType: normalizeFoundationType(pump.foundationType),
     area: pump.area ?? "Sin asignar",
     aviso: pump.aviso ?? "",
     alarma: pump.alarma ?? "",
@@ -227,6 +229,14 @@ function normalizePumpType(value, name = "") {
   const match = PUMP_TYPES.find((type) => cleanKey(type) === cleanKey(requested));
   if (match) return match;
   return cleanKey(name).includes("piston") ? "Pistón" : "Otra";
+}
+
+function normalizeDriveType(value) {
+  return ["Acople directo", "Eje intermedio / Poleas"].includes(value) ? value : "";
+}
+
+function normalizeFoundationType(value) {
+  return ["Rígida", "Flexible"].includes(value) ? value : "";
 }
 
 function measurementPointsForPump(pump) {
@@ -351,8 +361,8 @@ function calculatedPumpStatus(pump) {
   const alarmThreshold = parseThreshold(pump.alarma);
   const warningThreshold = parseThreshold(pump.aviso);
 
-  if (alarmThreshold !== null && latestValues.some((value) => value > alarmThreshold)) return "Alarma";
-  if (warningThreshold !== null && latestValues.some((value) => value > warningThreshold)) return "Aviso";
+  if (alarmThreshold !== null && latestValues.some((value) => value >= alarmThreshold)) return "Alarma";
+  if (warningThreshold !== null && latestValues.some((value) => value >= warningThreshold)) return "Aviso";
   if (baseStatus === "Aviso" || baseStatus === "Alarma") return baseStatus;
   return "Operativa";
 }
@@ -369,10 +379,10 @@ function pumpAlert(pump) {
     const value = Number(item?.vibration);
     if (!item || !Number.isFinite(value)) return null;
 
-    if (alarmThreshold !== null && value > alarmThreshold) {
+    if (alarmThreshold !== null && value >= alarmThreshold) {
       return { point, value, unit: item.unit, date: item.date, thresholdType: "Alarma", threshold: alarmThreshold };
     }
-    if (warningThreshold !== null && value > warningThreshold) {
+    if (warningThreshold !== null && value >= warningThreshold) {
       return { point, value, unit: item.unit, date: item.date, thresholdType: "Aviso", threshold: warningThreshold };
     }
     return null;
@@ -597,6 +607,22 @@ function renderDetail(pump) {
           </div>
         </label>
         <label>
+          Transmisión
+          <select class="field" name="driveType">
+            <option value="">Seleccionar</option>
+            <option value="Acople directo" ${pump.driveType === "Acople directo" ? "selected" : ""}>Acople directo</option>
+            <option value="Eje intermedio / Poleas" ${pump.driveType === "Eje intermedio / Poleas" ? "selected" : ""}>Eje intermedio / Poleas</option>
+          </select>
+        </label>
+        <label>
+          Fundación
+          <select class="field" name="foundationType">
+            <option value="">Seleccionar</option>
+            <option value="Rígida" ${pump.foundationType === "Rígida" ? "selected" : ""}>Rígida</option>
+            <option value="Flexible" ${pump.foundationType === "Flexible" ? "selected" : ""}>Flexible</option>
+          </select>
+        </label>
+        <label>
           Aviso (mm/s RMS)
           <input class="field" name="aviso" type="number" step="0.01" min="0" inputmode="decimal" value="${escapeHtml(pump.aviso ?? "")}" />
         </label>
@@ -693,10 +719,10 @@ function renderDetail(pump) {
 }
 
 function renderThresholdRecommendation(pump) {
-  const recommendation = recommendedThresholds(pump.pumpType, pump.powerKw);
+  const recommendation = recommendedThresholds(pump.pumpType, pump.powerKw, pump.driveType, pump.foundationType);
   const message = recommendation
     ? `Recomendación: Aviso ${recommendation.aviso} y Alarma ${recommendation.alarma} mm/s RMS (${recommendation.profile}; ${recommendation.basis}).`
-    : "Indica la potencia para calcular los valores recomendados de Aviso y Alarma.";
+    : thresholdReferenceMessage(pump.pumpType, pump.powerKw, pump.driveType, pump.foundationType);
 
   return `
     <div class="threshold-recommendation full" id="thresholdRecommendation">
@@ -707,6 +733,14 @@ function renderThresholdRecommendation(pump) {
       <button class="button secondary button-small" type="button" id="applyRecommendedThresholds" ${recommendation ? "" : "disabled"}>Aplicar recomendación</button>
     </div>
   `;
+}
+
+function thresholdReferenceMessage(pumpType, powerKw, driveType, foundationType) {
+  if (pumpType !== "Centrífuga") return "La tabla aportada solo cubre bombas radial, axial o diagonal; mantén los umbrales manuales para este tipo.";
+  if (powerKw === null) return "Indica la potencia para comprobar si la tabla de referencia es aplicable.";
+  if (powerKw <= 15) return "La tabla aportada solo cubre bombas de más de 15 kW; mantén los umbrales manuales.";
+  if (!driveType || !foundationType) return "Selecciona la transmisión y la fundación para calcular Aviso (amarillo) y Alarma (rojo).";
+  return "No hay una combinación válida para calcular los umbrales.";
 }
 
 function renderPointSummary(point, item) {
@@ -1352,6 +1386,8 @@ function bindEvents() {
   document.querySelector("#pumpForm")?.addEventListener("submit", saveSelectedPump);
   document.querySelector("#pumpForm [name='pumpType']")?.addEventListener("change", applyThresholdRecommendation);
   document.querySelector("#pumpForm [name='powerKw']")?.addEventListener("change", applyThresholdRecommendation);
+  document.querySelector("#pumpForm [name='driveType']")?.addEventListener("change", applyThresholdRecommendation);
+  document.querySelector("#pumpForm [name='foundationType']")?.addEventListener("change", applyThresholdRecommendation);
   document.querySelector("#applyRecommendedThresholds")?.addEventListener("click", applyThresholdRecommendation);
   document.querySelector("#incidentForm")?.addEventListener("submit", addIncident);
   document.querySelector("#importMeasures")?.addEventListener("click", () => document.querySelector("#measureFile")?.click());
@@ -1384,6 +1420,8 @@ function addPump() {
     name: "Nueva bomba",
     pumpType: "Centrífuga",
     powerKw: null,
+    driveType: "",
+    foundationType: "",
     area: "Sin asignar",
     aviso: "",
     alarma: "",
@@ -1419,6 +1457,8 @@ function saveSelectedPump(event) {
     name: String(form.get("name") ?? "").trim(),
     pumpType: normalizePumpType(form.get("pumpType"), pump.name),
     powerKw: parseOptionalNumber(form.get("powerKw")),
+    driveType: normalizeDriveType(form.get("driveType")),
+    foundationType: normalizeFoundationType(form.get("foundationType")),
     area: String(form.get("area") ?? "").trim(),
     aviso: String(form.get("aviso") ?? "").trim(),
     alarma: String(form.get("alarma") ?? "").trim(),
@@ -1441,12 +1481,14 @@ function applyThresholdRecommendation() {
 
   const pumpType = normalizePumpType(form.elements.pumpType?.value);
   const powerKw = parseOptionalNumber(form.elements.powerKw?.value);
-  const recommendation = recommendedThresholds(pumpType, powerKw);
+  const driveType = normalizeDriveType(form.elements.driveType?.value);
+  const foundationType = normalizeFoundationType(form.elements.foundationType?.value);
+  const recommendation = recommendedThresholds(pumpType, powerKw, driveType, foundationType);
   const note = document.querySelector("#thresholdRecommendation span");
   const button = document.querySelector("#applyRecommendedThresholds");
 
   if (!recommendation) {
-    if (note) note.textContent = "Indica una potencia mayor que cero para calcular los umbrales.";
+    if (note) note.textContent = thresholdReferenceMessage(pumpType, powerKw, driveType, foundationType);
     if (button) button.disabled = true;
     return;
   }
@@ -1928,6 +1970,8 @@ function mergeMeasurements(rows, conditionMap = new Map()) {
         name: normalized.name || normalized.code,
         pumpType: "Otra",
         powerKw: null,
+        driveType: "",
+        foundationType: "",
         area: normalized.area || "Importada",
         aviso: "",
         alarma: "",
