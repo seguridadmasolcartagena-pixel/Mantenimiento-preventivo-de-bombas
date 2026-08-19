@@ -18,16 +18,11 @@ Aplicacion web estatica para consultar el historial de vibraciones e incidencias
 - Reseteo de las medidas activas de una bomba con confirmacion previa, conservando el historico maestro.
 - Potencia nominal en kW por bomba y recomendacion automatica de umbrales de Aviso y Alarma, siempre editables manualmente.
 
-## Umbrales de la tabla de referencia
+## Umbrales de referencia de planta
 
-La recomendacion automatica reproduce la tabla facilitada para bombas radial, axial o diagonal de mas de 15 kW. Todas las bombas de la aplicacion se consideran instaladas sobre fundacion rigida, por lo que la ficha solo solicita el tipo de transmision.
+Todas las bombas utilizan como referencia inicial Aviso a 4 mm/s RMS y Alarma a 6 mm/s RMS, independientemente del tipo, la potencia o el acople. La potencia nominal se conserva como informacion tecnica de la bomba y no modifica los umbrales.
 
-| Transmision | Fundacion | Grupo | Aviso amarillo | Alarma roja |
-| --- | --- | --- | ---: | ---: |
-| Acople directo | Rigida | Grupo 4 | 2,8 mm/s RMS | 4,5 mm/s RMS |
-| Eje intermedio / Poleas | Rigida | Grupo 3 | 3,5 mm/s RMS | 4,5 mm/s RMS |
-
-Para bombas no incluidas en la tabla o con potencia igual o inferior a 15 kW no se inventa una recomendacion: los campos permanecen disponibles para introducir los limites manuales. El usuario tambien puede sustituir cualquier recomendacion antes de guardar o volver a aplicarla mediante el boton correspondiente.
+Las bombas nuevas y las que no tengan limites configurados reciben automaticamente la referencia 4/6. Los valores existentes y cualquier ajuste posterior permanecen editables. El boton `Aplicar referencia 4/6` permite recuperar los valores generales en cualquier momento.
 
 Los valores no sustituyen los limites del fabricante, la evaluacion del montaje, la tendencia historica ni los procedimientos de mantenimiento y seguridad de la planta.
 
@@ -140,8 +135,8 @@ Cada bomba se interpreta con estos cuatro puntos:
 La app calcula el estado visible de cada bomba con las ultimas medidas disponibles de los cuatro puntos:
 
 - `Operativa`: ninguna ultima medida supera los umbrales configurados.
-- `Aviso`: una o mas ultimas medidas superan el valor de `Aviso`.
-- `Alarma`: una o mas ultimas medidas superan el valor de `Alarma`.
+- `Aviso`: una o mas ultimas medidas alcanzan o superan el valor de `Aviso`.
+- `Alarma`: una o mas ultimas medidas alcanzan o superan el valor de `Alarma`.
 - `Parada`: estado operativo manual; tiene prioridad sobre Aviso y Alarma.
 
-Si una medida supera los dos umbrales, prevalece `Alarma`.
+Si una medida alcanza los dos umbrales, prevalece `Alarma`.
