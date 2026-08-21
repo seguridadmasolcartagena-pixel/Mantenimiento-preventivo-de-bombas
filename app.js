@@ -1,4 +1,6 @@
 import { recommendedThresholds } from "./thresholds.js";
+import { buildPredictiveContext } from "./predictive-engine.js";
+import { mountPredictiveChat } from "./predictive-chat.js";
 
 const STORAGE_KEY = "gestor-bombas-v3";
 const VIEWDATA_STORAGE_KEY = "gestor-bombas-viewdata-v1";
@@ -2615,6 +2617,9 @@ function escapeHtml(value) {
 async function initApp() {
   await loadSharedDataFromSharePoint();
   render();
+  mountPredictiveChat({
+    getContext: () => buildPredictiveContext(state.pumps, state.selectedId, state.viewDataBlocks),
+  });
 }
 
 initApp();
