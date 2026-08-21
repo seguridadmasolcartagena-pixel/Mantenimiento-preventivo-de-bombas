@@ -1,6 +1,6 @@
 const FLOW_URL_KEY = "gestor-bombas-predictive-chat-flow-url";
 const CHAT_HISTORY_KEY = "gestor-bombas-predictive-chat-history";
-const MAX_HISTORY_MESSAGES = 10;
+const CONVERSATION_ID_KEY = "gestor-bombas-predictive-chat-conversation-id";
 
 let mounted = false;
 let getContext = () => ({});
@@ -23,6 +23,8 @@ export function mountPredictiveChat(options = {}) {
           <span id="predictiveChatCoverage"></span>
         </div>
         <div class="predictive-chat-header-actions">
+          <button type="button" data-chat-action="scroll-up" aria-label="Subir en la conversación" title="Subir en la conversación">↑</button>
+          <button type="button" data-chat-action="scroll-down" aria-label="Bajar en la conversación" title="Bajar en la conversación">↓</button>
           <button type="button" data-chat-action="configure">Configurar</button>
           <button type="button" data-chat-action="close" aria-label="Cerrar asistente">×</button>
         </div>
@@ -38,7 +40,7 @@ export function mountPredictiveChat(options = {}) {
           <button type="submit">Guardar</button>
         </div>
       </form>
-      <div class="predictive-chat-messages" id="predictiveChatMessages" aria-live="polite"></div>
+      <div class="predictive-chat-messages" id="predictiveChatMessages" aria-live="polite" aria-label="Historial de conversación" tabindex="0"></div>
       <form class="predictive-chat-form" id="predictiveChatForm">
         <textarea name="question" rows="2" maxlength="1200" placeholder="Pregunta sobre bombas y tendencias" required></textarea>
         <button type="submit" aria-label="Enviar pregunta" title="Enviar">↑</button>
@@ -51,6 +53,8 @@ export function mountPredictiveChat(options = {}) {
   root.querySelector("[data-chat-action='close']")?.addEventListener("click", closePanel);
   root.querySelector("[data-chat-action='configure']")?.addEventListener("click", openConfiguration);
   root.querySelector("[data-chat-action='cancel-config']")?.addEventListener("click", closeConfiguration);
+  root.querySelector("[data-chat-action='scroll-up']")?.addEventListener("click", () => scrollMessages(-1));
+  root.querySelector("[data-chat-action='scroll-down']")?.addEventListener("click", () => scrollMessages(1));
   root.querySelector("#predictiveChatConfig")?.addEventListener("submit", saveConfiguration);
   root.querySelector("#predictiveChatForm")?.addEventListener("submit", sendQuestion);
   renderMessages();
@@ -98,8 +102,9 @@ function saveConfiguration(event) {
     return;
   }
   localStorage.setItem(FLOW_URL_KEY, url);
+  sessionStorage.removeItem(CONVERSATION_ID_KEY);
   closeConfiguration();
-  appendMessage("assistant", "Conexión del asistente actualizada.");
+  appendMessage("assistant", "Conexión del asistente actualizada. Se iniciará una conversación nueva.");
 }
 
 async function sendQuestion(event) {
@@ -123,27 +128,28 @@ async function sendQuestion(event) {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 100000);
   try {
-    const history = messages
-      .filter((item) => item.role === "user" || item.role === "assistant")
-      .slice(-MAX_HISTORY_MESSAGES - 1, -1)
-      .map((item) => ({ role: item.role, content: item.content.slice(0, 2000) }));
+    const context = getContext() || {};
     const response = await fetch(flowUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        pregunta: question,
-        historial: history,
-        contexto: getContext(),
-        usuario: "gestor-bombas",
+        mensaje: question,
+        bomba: getPumpCode(context),
+        conversationId: loadConversationId(),
       }),
       credentials: "omit",
       referrerPolicy: "no-referrer",
       signal: controller.signal,
     });
     if (!response.ok) throw new Error(`El flujo respondió con estado ${response.status}.`);
+
     const result = await response.json();
     const answer = String(result.respuesta || result.answer || "").trim();
     if (!answer) throw new Error("El flujo no devolvió el campo respuesta.");
+
+    const nextConversationId = String(result.conversationId || "").trim();
+    if (nextConversationId) persistConversationId(nextConversationId);
+
     appendMessage("assistant", answer);
   } catch (error) {
     const message = error.name === "AbortError" ? "La consulta ha superado el tiempo de espera." : error.message;
@@ -178,6 +184,40 @@ function renderMessages() {
     container.append(waiting);
   }
   container.scrollTop = container.scrollHeight;
+}
+
+function scrollMessages(direction) {
+  const container = document.querySelector("#predictiveChatMessages");
+  if (!container) return;
+  const distance = Math.max(180, Math.round(container.clientHeight * 0.75));
+  container.scrollBy({ top: distance * direction, behavior: "smooth" });
+  container.focus({ preventScroll: true });
+}
+
+function getPumpCode(context) {
+  const candidates = [
+    context?.selectedPump?.code,
+    context?.pump?.code,
+    context?.pumpCode,
+    context?.selectedPumpCode,
+  ];
+  return String(candidates.find((value) => value !== undefined && value !== null && String(value).trim()) || "").trim();
+}
+
+function loadConversationId() {
+  try {
+    return sessionStorage.getItem(CONVERSATION_ID_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function persistConversationId(value) {
+  try {
+    sessionStorage.setItem(CONVERSATION_ID_KEY, value);
+  } catch {
+    // The chat continues without conversation persistence if session storage is unavailable.
+  }
 }
 
 function updateCoverage() {
