@@ -17,6 +17,7 @@ Aplicacion web estatica para consultar el historial de vibraciones e incidencias
 - Eliminacion de bombas con confirmacion previa.
 - Reseteo de las medidas activas de una bomba con confirmacion previa, conservando el historico maestro.
 - Potencia nominal en kW por bomba y recomendacion automatica de umbrales de Aviso y Alarma, siempre editables manualmente.
+- Asistente predictivo conectado mediante Power Automate, con analisis local de tendencias del historico importado.
 
 ## Umbrales de referencia de planta
 
@@ -25,6 +26,27 @@ Todas las bombas utilizan como referencia inicial Aviso a 4 mm/s RMS y Alarma a 
 Las bombas nuevas y las que no tengan limites configurados reciben automaticamente la referencia 4/6. Los valores existentes y cualquier ajuste posterior permanecen editables. El boton `Aplicar referencia 4/6` permite recuperar los valores generales en cualquier momento.
 
 Los valores no sustituyen los limites del fabricante, la evaluacion del montaje, la tendencia historica ni los procedimientos de mantenimiento y seguridad de la planta.
+
+## Asistente predictivo
+
+El boton `IA` abre un chat que consulta el estado actual de la aplicacion y los historicos importados. La aplicacion calcula primero las tendencias por bomba y punto de medida; el modelo recibe resultados estructurados y los explica, pero no calcula la regresion por su cuenta.
+
+La prediccion:
+
+- agrega por dia usando la mediana para evitar que varias lecturas seguidas dominen la tendencia
+- requiere al menos cuatro dias de datos distribuidos en siete dias o mas
+- utiliza hasta doce observaciones diarias recientes
+- proyecta el valor a 30 dias y posibles cruces de umbral hasta un maximo de 90 dias
+- informa numero de muestras, periodo, pendiente, R cuadrado y confianza
+- avisa cuando hay frecuencias de variador mezcladas
+
+La URL del flujo se guarda solo en el navegador desde `Configurar`. La clave de OpenAI no se introduce en la aplicacion. Consulta `CHATBOT_POWER_AUTOMATE.md` para crear el flujo.
+
+Pruebas del motor predictivo:
+
+```bash
+node predictive-engine.test.mjs
+```
 
 ## Uso
 
