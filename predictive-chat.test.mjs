@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { extractFlowAnswer } from "./predictive-chat.js";
+import { clampPanelGeometry, extractFlowAnswer } from "./predictive-chat.js";
 
 assert.equal(extractFlowAnswer({ respuesta: "Analisis directo" }), "Analisis directo");
 assert.equal(extractFlowAnswer({ answer: "Respuesta alternativa" }), "Respuesta alternativa");
@@ -27,5 +27,14 @@ assert.equal(
   "Respuesta envuelta",
 );
 assert.equal(extractFlowAnswer({}), "");
+
+assert.deepEqual(
+  clampPanelGeometry({ left: -100, top: 900, width: 900, height: 900 }, { width: 800, height: 600 }),
+  { left: 8, top: 8, width: 784, height: 584 },
+);
+assert.deepEqual(
+  clampPanelGeometry({ left: 120, top: 80, width: 600, height: 480 }, { width: 1200, height: 900 }),
+  { left: 120, top: 80, width: 600, height: 480 },
+);
 
 console.log("Predictive chat tests passed.");
