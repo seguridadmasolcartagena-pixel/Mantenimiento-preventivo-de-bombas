@@ -46,6 +46,7 @@ export function mountPredictiveChat(options = {}) {
       </form>
       <div class="predictive-chat-messages" id="predictiveChatMessages" aria-live="polite" aria-label="Historial de conversación" tabindex="0"></div>
       <form class="predictive-chat-form" id="predictiveChatForm">
+        <button class="predictive-chat-configure-shortcut" type="button" data-chat-action="configure-footer">Configurar</button>
         <textarea name="question" rows="2" maxlength="1200" placeholder="Pregunta sobre bombas y tendencias" required></textarea>
         <button type="submit" aria-label="Enviar pregunta" title="Enviar">↑</button>
       </form>
@@ -56,6 +57,7 @@ export function mountPredictiveChat(options = {}) {
   root.querySelector(".predictive-chat-launcher")?.addEventListener("click", openPanel);
   root.querySelector("[data-chat-action='close']")?.addEventListener("click", closePanel);
   root.querySelector("[data-chat-action='configure']")?.addEventListener("click", openConfiguration);
+  root.querySelector("[data-chat-action='configure-footer']")?.addEventListener("click", openConfiguration);
   root.querySelector("[data-chat-action='cancel-config']")?.addEventListener("click", closeConfiguration);
   root.querySelector("[data-chat-action='scroll-up']")?.addEventListener("click", () => scrollMessages(-1));
   root.querySelector("[data-chat-action='scroll-down']")?.addEventListener("click", () => scrollMessages(1));
@@ -367,7 +369,7 @@ function setBusy(value) {
   const form = document.querySelector("#predictiveChatForm");
   if (form) {
     form.querySelector("textarea").disabled = value;
-    form.querySelector("button").disabled = value;
+    form.querySelector("button[type='submit']").disabled = value;
   }
   renderMessages();
 }
