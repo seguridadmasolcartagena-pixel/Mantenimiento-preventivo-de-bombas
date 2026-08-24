@@ -1053,11 +1053,12 @@ td strong {
 
 .predictive-chat-panel {
   position: fixed;
-  right: 20px;
-  bottom: 84px;
+  right: 24px;
+  bottom: 24px;
   z-index: 31;
-  width: min(420px, calc(100vw - 40px));
-  height: min(680px, calc(100vh - 112px));
+  width: min(680px, calc(100vw - 48px));
+  height: min(780px, calc(100dvh - 48px));
+  max-height: calc(100dvh - 48px);
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   overflow: hidden;
@@ -1174,6 +1175,7 @@ td strong {
   gap: 10px;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding: 14px;
   background: #fbfcfb;
 }
@@ -1205,8 +1207,10 @@ td strong {
 }
 
 .predictive-chat-form {
+  position: relative;
+  z-index: 2;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) 42px;
+  grid-template-columns: minmax(0, 1fr) 46px;
   align-items: end;
   gap: 8px;
   padding: 12px;
@@ -1214,24 +1218,11 @@ td strong {
   background: white;
 }
 
-.predictive-chat-form .predictive-chat-configure-shortcut {
-  width: auto;
-  min-width: 84px;
-  height: 42px;
-  padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: white;
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 750;
-}
-
 .predictive-chat-form textarea {
   width: 100%;
-  min-height: 42px;
-  max-height: 120px;
-  padding: 9px 10px;
+  min-height: 48px;
+  max-height: 144px;
+  padding: 11px 12px;
   border: 1px solid var(--line);
   border-radius: 6px;
   color: var(--text);
@@ -1246,8 +1237,8 @@ td strong {
 }
 
 .predictive-chat-form button {
-  width: 42px;
-  height: 42px;
+  width: 46px;
+  height: 48px;
   border-radius: 6px;
   background: var(--accent-dark);
   color: white;
@@ -1467,7 +1458,4 @@ td strong {
     display: none;
   }
 
-  .predictive-chat-header-actions [data-chat-action="configure"] {
-    max-width: 92px;
-  }
 }
