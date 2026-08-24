@@ -1,6 +1,6 @@
 import { recommendedThresholds } from "./thresholds.js";
 import { buildPredictiveContext } from "./predictive-engine.js";
-import { mountPredictiveChat } from "./predictive-chat.js?v=20260824-power-automate";
+import { mountPredictiveChat } from "./predictive-chat.js?v=20260824-flow-contract-v2";
 
 const STORAGE_KEY = "gestor-bombas-v3";
 const VIEWDATA_STORAGE_KEY = "gestor-bombas-viewdata-v1";
