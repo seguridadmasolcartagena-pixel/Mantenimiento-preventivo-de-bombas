@@ -1,6 +1,7 @@
 const FLOW_URL_KEY = "gestor-bombas-predictive-chat-flow-url";
 const CHAT_HISTORY_KEY = "gestor-bombas-predictive-chat-history";
 const CONVERSATION_ID_KEY = "gestor-bombas-predictive-chat-conversation-id";
+const CHAT_GEOMETRY_KEY = "gestor-bombas-predictive-chat-geometry";
 const MAX_HISTORY_MESSAGES = 10;
 const DIRECT_REQUEST_TIMEOUT_MS = 125000;
 const ASYNC_MAX_WAIT_MS = 5 * 60 * 1000;
@@ -19,9 +20,9 @@ export function mountPredictiveChat(options = {}) {
   const root = document.createElement("div");
   root.id = "predictiveChatRoot";
   root.innerHTML = `
-    <button class="predictive-chat-launcher" type="button" aria-label="Abrir asistente predictivo" title="Asistente predictivo">IA</button>
+    <button class="predictive-chat-launcher" type="button" aria-label="Abrir asistente predictivo" aria-expanded="false" title="Abrir asistente predictivo">IA</button>
     <section class="predictive-chat-panel" aria-label="Asistente predictivo" hidden>
-      <header class="predictive-chat-header">
+      <header class="predictive-chat-header" title="Arrastra para mover la ventana">
         <div>
           <strong>Asistente predictivo</strong>
           <span id="predictiveChatCoverage"></span>
@@ -52,21 +53,35 @@ export function mountPredictiveChat(options = {}) {
   `;
   document.body.append(root);
 
-  root.querySelector(".predictive-chat-launcher")?.addEventListener("click", openPanel);
+  const panel = root.querySelector(".predictive-chat-panel");
+  root.querySelector(".predictive-chat-launcher")?.addEventListener("click", togglePanel);
   root.querySelector("[data-chat-action='close']")?.addEventListener("click", closePanel);
   root.querySelector("[data-chat-action='cancel-config']")?.addEventListener("click", closeConfiguration);
   root.querySelector("[data-chat-action='scroll-up']")?.addEventListener("click", () => scrollMessages(-1));
   root.querySelector("[data-chat-action='scroll-down']")?.addEventListener("click", () => scrollMessages(1));
   root.querySelector("#predictiveChatConfig")?.addEventListener("submit", saveConfiguration);
   root.querySelector("#predictiveChatForm")?.addEventListener("submit", sendQuestion);
+  panel?.querySelector(".predictive-chat-header")?.addEventListener("pointerdown", startPanelDrag);
+  if (panel && "ResizeObserver" in window) {
+    new ResizeObserver(() => persistPanelGeometry(panel)).observe(panel);
+  }
+  window.addEventListener("resize", () => keepPanelInViewport(panel));
   renderMessages();
+}
+
+function togglePanel() {
+  const panel = document.querySelector(".predictive-chat-panel");
+  if (!panel || panel.hidden) openPanel();
+  else closePanel();
 }
 
 function openPanel() {
   const panel = document.querySelector(".predictive-chat-panel");
   if (!panel) return;
+  restorePanelGeometry(panel);
   panel.hidden = false;
   document.body.classList.add("predictive-chat-open");
+  updateLauncherState(true);
   updateCoverage();
   if (!messages.length) {
     const summary = getContext()?.portfolioSummary;
@@ -74,13 +89,149 @@ function openPanel() {
     persistMessages();
     renderMessages();
   }
-  panel.querySelector("textarea")?.focus();
+  window.requestAnimationFrame(() => {
+    keepPanelInViewport(panel);
+    panel.querySelector("textarea")?.focus();
+  });
 }
 
 function closePanel() {
   const panel = document.querySelector(".predictive-chat-panel");
   if (panel) panel.hidden = true;
   document.body.classList.remove("predictive-chat-open");
+  updateLauncherState(false);
+}
+
+function updateLauncherState(open) {
+  const launcher = document.querySelector(".predictive-chat-launcher");
+  if (!launcher) return;
+  launcher.setAttribute("aria-expanded", String(open));
+  launcher.setAttribute("aria-label", open ? "Cerrar asistente predictivo" : "Abrir asistente predictivo");
+  launcher.title = open ? "Cerrar asistente predictivo" : "Abrir asistente predictivo";
+}
+
+function startPanelDrag(event) {
+  if (event.button !== 0 || event.target.closest("button, input, textarea")) return;
+  const header = event.currentTarget;
+  const panel = header.closest(".predictive-chat-panel");
+  if (!panel || isCompactViewport()) return;
+
+  event.preventDefault();
+  const rect = panel.getBoundingClientRect();
+  const offsetX = event.clientX - rect.left;
+  const offsetY = event.clientY - rect.top;
+  panel.style.left = `${rect.left}px`;
+  panel.style.top = `${rect.top}px`;
+  panel.style.right = "auto";
+  panel.style.bottom = "auto";
+  panel.style.width = `${rect.width}px`;
+  panel.style.height = `${rect.height}px`;
+  panel.classList.add("is-dragging");
+  header.setPointerCapture(event.pointerId);
+
+  const move = (moveEvent) => {
+    const geometry = clampPanelGeometry({
+      left: moveEvent.clientX - offsetX,
+      top: moveEvent.clientY - offsetY,
+      width: panel.offsetWidth,
+      height: panel.offsetHeight,
+    }, { width: window.innerWidth, height: window.innerHeight });
+    panel.style.left = `${geometry.left}px`;
+    panel.style.top = `${geometry.top}px`;
+  };
+  const stop = () => {
+    panel.classList.remove("is-dragging");
+    header.removeEventListener("pointermove", move);
+    header.removeEventListener("pointerup", stop);
+    header.removeEventListener("pointercancel", stop);
+    persistPanelGeometry(panel);
+  };
+
+  header.addEventListener("pointermove", move);
+  header.addEventListener("pointerup", stop);
+  header.addEventListener("pointercancel", stop);
+}
+
+export function clampPanelGeometry(geometry, viewport) {
+  const margin = 8;
+  const maxWidth = Math.max(0, Number(viewport?.width || 0) - margin * 2);
+  const maxHeight = Math.max(0, Number(viewport?.height || 0) - margin * 2);
+  const minWidth = Math.min(380, maxWidth);
+  const minHeight = Math.min(360, maxHeight);
+  const width = clamp(Number(geometry?.width) || 680, minWidth, maxWidth);
+  const height = clamp(Number(geometry?.height) || 700, minHeight, maxHeight);
+  return {
+    left: clamp(Number(geometry?.left) || margin, margin, Math.max(margin, maxWidth - width + margin)),
+    top: clamp(Number(geometry?.top) || margin, margin, Math.max(margin, maxHeight - height + margin)),
+    width,
+    height,
+  };
+}
+
+function keepPanelInViewport(panel) {
+  if (!panel || panel.hidden) return;
+  if (isCompactViewport()) {
+    clearPanelGeometryStyles(panel);
+    return;
+  }
+  const rect = panel.getBoundingClientRect();
+  const geometry = clampPanelGeometry(rect, { width: window.innerWidth, height: window.innerHeight });
+  panel.style.left = `${geometry.left}px`;
+  panel.style.top = `${geometry.top}px`;
+  panel.style.right = "auto";
+  panel.style.bottom = "auto";
+  panel.style.width = `${geometry.width}px`;
+  panel.style.height = `${geometry.height}px`;
+}
+
+function restorePanelGeometry(panel) {
+  if (isCompactViewport()) {
+    clearPanelGeometryStyles(panel);
+    return;
+  }
+  try {
+    const saved = JSON.parse(localStorage.getItem(CHAT_GEOMETRY_KEY) || "null");
+    if (!saved) return;
+    const geometry = clampPanelGeometry(saved, { width: window.innerWidth, height: window.innerHeight });
+    panel.style.left = `${geometry.left}px`;
+    panel.style.top = `${geometry.top}px`;
+    panel.style.right = "auto";
+    panel.style.bottom = "auto";
+    panel.style.width = `${geometry.width}px`;
+    panel.style.height = `${geometry.height}px`;
+  } catch {
+    localStorage.removeItem(CHAT_GEOMETRY_KEY);
+  }
+}
+
+function persistPanelGeometry(panel) {
+  if (!panel || panel.hidden || isCompactViewport()) return;
+  const rect = panel.getBoundingClientRect();
+  if (rect.width < 1 || rect.height < 1) return;
+  try {
+    localStorage.setItem(CHAT_GEOMETRY_KEY, JSON.stringify({
+      left: Math.round(rect.left),
+      top: Math.round(rect.top),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+    }));
+  } catch {
+    // The window remains movable when local storage is unavailable.
+  }
+}
+
+function clearPanelGeometryStyles(panel) {
+  for (const property of ["left", "top", "right", "bottom", "width", "height"]) {
+    panel.style.removeProperty(property);
+  }
+}
+
+function isCompactViewport() {
+  return window.matchMedia("(max-width: 720px)").matches;
+}
+
+function clamp(value, minimum, maximum) {
+  return Math.min(maximum, Math.max(minimum, value));
 }
 
 function openConfiguration() {
