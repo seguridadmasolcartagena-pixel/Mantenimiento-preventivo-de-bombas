@@ -1051,17 +1051,25 @@ td strong {
   background: var(--accent-dark);
 }
 
+.predictive-chat-launcher[aria-expanded="true"] {
+  background: var(--accent-dark);
+}
+
 .predictive-chat-panel {
   position: fixed;
   right: 24px;
-  bottom: 24px;
+  bottom: 88px;
   z-index: 31;
   width: min(680px, calc(100vw - 48px));
-  height: min(780px, calc(100dvh - 48px));
-  max-height: calc(100dvh - 48px);
+  height: min(760px, calc(100dvh - 112px));
+  min-width: 380px;
+  min-height: 360px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 16px);
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   overflow: hidden;
+  resize: both;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: white;
@@ -1084,6 +1092,17 @@ td strong {
   padding: 12px 14px;
   border-bottom: 1px solid var(--line);
   background: var(--surface-soft);
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+
+.predictive-chat-panel.is-dragging {
+  user-select: none;
+}
+
+.predictive-chat-header-actions button {
+  cursor: pointer;
 }
 
 .predictive-chat-header strong,
@@ -1448,14 +1467,17 @@ td strong {
   }
 
   .predictive-chat-panel {
-    inset: 10px;
+    inset: 10px 10px 82px;
     width: auto;
     height: auto;
+    min-width: 0;
+    min-height: 0;
     max-height: none;
+    resize: none;
   }
 
   .predictive-chat-open .predictive-chat-launcher {
-    display: none;
+    display: block;
   }
 
 }
