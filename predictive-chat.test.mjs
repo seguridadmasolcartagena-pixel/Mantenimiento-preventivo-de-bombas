@@ -8,6 +8,24 @@ assert.equal(
   "Analisis asincrono",
 );
 assert.equal(extractFlowAnswer({ outputs: { body: "Texto del flujo" } }), "Texto del flujo");
+assert.equal(
+  extractFlowAnswer({
+    id: "resp_123",
+    output: [
+      { type: "reasoning", content: [] },
+      { type: "message", content: [{ type: "output_text", text: "Respuesta nativa de OpenAI" }] },
+    ],
+  }),
+  "Respuesta nativa de OpenAI",
+);
+assert.equal(
+  extractFlowAnswer(JSON.stringify({ ok: true, respuesta: "Respuesta JSON serializada" })),
+  "Respuesta JSON serializada",
+);
+assert.equal(
+  extractFlowAnswer({ body: { response: { output: [{ type: "message", content: [{ type: "output_text", text: "Respuesta envuelta" }] }] } } }),
+  "Respuesta envuelta",
+);
 assert.equal(extractFlowAnswer({}), "");
 
 console.log("Predictive chat tests passed.");

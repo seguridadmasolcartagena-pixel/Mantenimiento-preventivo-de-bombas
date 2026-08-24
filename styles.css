@@ -1073,6 +1073,8 @@ td strong {
 }
 
 .predictive-chat-header {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1171,6 +1173,7 @@ td strong {
   flex-direction: column;
   gap: 10px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 14px;
   background: #fbfcfb;
 }
@@ -1203,12 +1206,25 @@ td strong {
 
 .predictive-chat-form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 42px;
+  grid-template-columns: auto minmax(0, 1fr) 42px;
   align-items: end;
   gap: 8px;
   padding: 12px;
   border-top: 1px solid var(--line);
   background: white;
+}
+
+.predictive-chat-form .predictive-chat-configure-shortcut {
+  width: auto;
+  min-width: 84px;
+  height: 42px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 750;
 }
 
 .predictive-chat-form textarea {
