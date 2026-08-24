@@ -1,9 +1,11 @@
 import { recommendedThresholds } from "./thresholds.js";
 import { buildPredictiveContext } from "./predictive-engine.js";
-import { mountPredictiveChat } from "./predictive-chat.js?v=20260824-movable-chat";
+import { mountPredictiveChat } from "./predictive-chat.js?v=20260824-polished-chat";
 
 const STORAGE_KEY = "gestor-bombas-v3";
 const VIEWDATA_STORAGE_KEY = "gestor-bombas-viewdata-v1";
+const PLANT_NOTES_STORAGE_KEY = "gestor-bombas-plant-notes-v1";
+const PLANT_NOTES_AUTHOR_KEY = "gestor-bombas-plant-notes-author-v1";
 const LOCAL_UPDATED_AT_KEY = "gestor-bombas-local-updated-at-v1";
 const SHAREPOINT_FLOW_URL_KEY = "gestor-bombas-sharepoint-flow-url";
 const SHAREPOINT_CONFIG_SAVE_URL_KEY = "gestor-bombas-config-save-flow-url";
@@ -18,6 +20,7 @@ const STANDARD_MEASUREMENT_POINTS = ["B-LA", "B-LOA", "M-LA", "M-LOA"];
 const PISTON_MEASUREMENT_POINTS = ["M-LA", "M-LOA", "R", "A", "B"];
 const MEASUREMENT_POINTS = [...new Set([...STANDARD_MEASUREMENT_POINTS, ...PISTON_MEASUREMENT_POINTS, "M-AX"])];
 const MOTOR_MEASUREMENT_POINTS = new Set(["M-LA", "M-LOA", "M-AX"]);
+const MAX_PLANT_NOTES = 100;
 const POINT_COLORS = {
   "B-LA": "#0f766e",
   "B-LOA": "#2563eb",
@@ -143,6 +146,7 @@ function measurement(date, point, vibration) {
 const state = {
   pumps: loadPumps(),
   viewDataBlocks: loadViewDataBlocks(),
+  plantNotes: loadPlantNotes(),
   selectedId: null,
   query: "",
   filter: "Todas",
@@ -259,6 +263,31 @@ function loadViewDataBlocks() {
 
 function saveViewDataBlocks({ markUpdated = true } = {}) {
   localStorage.setItem(VIEWDATA_STORAGE_KEY, JSON.stringify(state.viewDataBlocks));
+  if (markUpdated) markLocalDataUpdated();
+}
+
+function normalizePlantNote(note) {
+  return {
+    id: note?.id ?? crypto.randomUUID(),
+    author: String(note?.author ?? "Operación").trim().slice(0, 60) || "Operación",
+    text: String(note?.text ?? "").trim().slice(0, 500),
+    createdAt: typeof note?.createdAt === "string" ? note.createdAt : new Date().toISOString(),
+  };
+}
+
+function loadPlantNotes() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PLANT_NOTES_STORAGE_KEY) || "[]");
+    return Array.isArray(parsed)
+      ? parsed.map(normalizePlantNote).filter((note) => note.text).slice(0, MAX_PLANT_NOTES)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePlantNotes({ markUpdated = true } = {}) {
+  localStorage.setItem(PLANT_NOTES_STORAGE_KEY, JSON.stringify(state.plantNotes));
   if (markUpdated) markLocalDataUpdated();
 }
 
@@ -440,6 +469,7 @@ function render() {
             )
             .join("")}
         </nav>
+        ${renderPlantNotesBoard()}
       </aside>
 
       <main class="main">
@@ -537,6 +567,56 @@ function renderPumpRow(pump) {
       <span class="status-dot ${status}" aria-hidden="true"></span>
     </button>
   `;
+}
+
+function renderPlantNotesBoard() {
+  const notes = [...state.plantNotes]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, MAX_PLANT_NOTES);
+  const author = localStorage.getItem(PLANT_NOTES_AUTHOR_KEY) || "";
+
+  return `
+    <section class="plant-notes-board" aria-label="Tablón de notas de planta">
+      <div class="plant-notes-header">
+        <div>
+          <h2>Tablón de planta</h2>
+          <span>Información entre turnos</span>
+        </div>
+        <span class="plant-notes-count">${notes.length}</span>
+      </div>
+      <form class="plant-note-form" id="plantNoteForm">
+        <input name="author" maxlength="60" value="${escapeHtml(author)}" placeholder="Nombre o turno" aria-label="Autor de la nota" required />
+        <textarea name="text" maxlength="500" rows="3" placeholder="Escribe una nota para el siguiente turno" aria-label="Texto de la nota" required></textarea>
+        <button type="submit">Publicar nota</button>
+      </form>
+      <div class="plant-notes-list" aria-live="polite">
+        ${
+          notes.length
+            ? notes.map((note) => `
+                <article class="plant-note">
+                  <p>${escapeHtml(note.text)}</p>
+                  <footer>
+                    <strong>${escapeHtml(note.author)}</strong>
+                    <time datetime="${escapeHtml(note.createdAt)}">${escapeHtml(formatPlantNoteDate(note.createdAt))}</time>
+                  </footer>
+                </article>
+              `).join("")
+            : `<p class="plant-notes-empty">Todavía no hay notas compartidas.</p>`
+        }
+      </div>
+    </section>
+  `;
+}
+
+function formatPlantNoteDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Sin fecha";
+  return new Intl.DateTimeFormat("es-ES", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function renderDetail(pump) {
@@ -1289,6 +1369,7 @@ function renderIncidents(incidents) {
 }
 
 function bindEvents() {
+  document.querySelector("#plantNoteForm")?.addEventListener("submit", addPlantNote);
   document.querySelectorAll("[data-filter]").forEach((button) => {
     button.addEventListener("click", () => {
       state.filter = button.dataset.filter;
@@ -1362,6 +1443,30 @@ function bindEvents() {
     render();
   });
   document.querySelector("#downloadHistory")?.addEventListener("click", downloadHistoryExcel);
+}
+
+async function addPlantNote(event) {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  const author = String(form.get("author") ?? "").trim().slice(0, 60);
+  const text = String(form.get("text") ?? "").trim().slice(0, 500);
+  if (!author || !text) {
+    showToast("Indica el autor y el texto de la nota.");
+    return;
+  }
+
+  localStorage.setItem(PLANT_NOTES_AUTHOR_KEY, author);
+  state.plantNotes = [normalizePlantNote({
+    id: crypto.randomUUID(),
+    author,
+    text,
+    createdAt: new Date().toISOString(),
+  }), ...state.plantNotes].slice(0, MAX_PLANT_NOTES);
+  savePlantNotes();
+  render();
+
+  const shared = await syncSharedData();
+  showToast(shared ? "Nota publicada en el tablón compartido." : "Nota guardada en este navegador; no se pudo sincronizar.");
 }
 
 function selectPump(id) {
@@ -2100,11 +2205,12 @@ async function updateSharePointExcel() {
 function sharedDataPayload() {
   const updatedAt = localStorage.getItem(LOCAL_UPDATED_AT_KEY) || new Date().toISOString();
   return {
-    version: 1,
+    version: 2,
     updatedAt,
     source: "App mantenimiento preventivo de bombas",
     pumps: state.pumps,
     viewDataBlocks: state.viewDataBlocks,
+    plantNotes: state.plantNotes,
     alerts: currentAlerts(),
   };
 }
@@ -2214,6 +2320,7 @@ function parseSharedDataPayload(payload) {
   return {
     pumps: data.pumps,
     viewDataBlocks: Array.isArray(data.viewDataBlocks) ? data.viewDataBlocks : [],
+    plantNotes: Array.isArray(data.plantNotes) ? data.plantNotes.map(normalizePlantNote).filter((note) => note.text) : null,
     updatedAt: typeof data.updatedAt === "string" ? data.updatedAt : "",
   };
 }
@@ -2235,6 +2342,10 @@ function decodeBase64Text(value) {
 function applySharedData(sharedData) {
   state.pumps = sharedData.pumps.map(normalizePump);
   state.viewDataBlocks = sharedData.viewDataBlocks;
+  if (Array.isArray(sharedData.plantNotes)) {
+    state.plantNotes = sharedData.plantNotes.slice(0, MAX_PLANT_NOTES);
+    savePlantNotes({ markUpdated: false });
+  }
   state.selectedId = state.pumps[0]?.id ?? null;
   state.filter = "Todas";
   savePumps({ markUpdated: false });

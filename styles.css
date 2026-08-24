@@ -53,7 +53,13 @@ button {
 }
 
 .sidebar {
-  min-height: 100vh;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   padding: 28px 18px;
   background: rgba(255, 255, 255, 0.86);
   border-right: 1px solid rgba(217, 222, 212, 0.88);
@@ -90,8 +96,156 @@ button {
 }
 
 .nav-section {
+  flex: 0 0 auto;
   display: grid;
   gap: 8px;
+}
+
+.plant-notes-board {
+  min-height: 0;
+  height: min(430px, 46vh);
+  max-height: 430px;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  margin-top: auto;
+  border: 1px solid #c4d0cd;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 28px rgba(28, 37, 31, 0.1);
+  overflow: hidden;
+}
+
+.plant-notes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+  background: #173b38;
+  color: white;
+}
+
+.plant-notes-header h2 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.plant-notes-header span {
+  display: block;
+  margin-top: 2px;
+  color: #c8d8d5;
+  font-size: 10px;
+}
+
+.plant-notes-header .plant-notes-count {
+  min-width: 26px;
+  margin: 0;
+  padding: 3px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 6px;
+  color: white;
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.plant-note-form {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+  background: #f7faf9;
+}
+
+.plant-note-form input,
+.plant-note-form textarea {
+  width: 100%;
+  padding: 8px 9px;
+  border: 1px solid #bac8c4;
+  border-radius: 6px;
+  background: white;
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+}
+
+.plant-note-form textarea {
+  min-height: 58px;
+  max-height: 58px;
+  line-height: 1.4;
+  resize: none;
+}
+
+.plant-note-form input:focus,
+.plant-note-form textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+}
+
+.plant-note-form button {
+  min-height: 34px;
+  border-radius: 6px;
+  background: var(--accent-dark);
+  color: white;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.plant-note-form button:hover {
+  background: #0b5f59;
+}
+
+.plant-notes-list {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px;
+  background: #eef3f2;
+}
+
+.plant-note {
+  padding: 9px;
+  border: 1px solid #d2ddda;
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  background: white;
+}
+
+.plant-note + .plant-note {
+  margin-top: 7px;
+}
+
+.plant-note p {
+  margin: 0;
+  color: var(--text);
+  font-size: 11.5px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.plant-note footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 9.5px;
+}
+
+.plant-note footer strong {
+  color: var(--accent-dark);
+}
+
+.plant-notes-empty {
+  margin: 12px 4px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+  text-align: center;
 }
 
 .nav-button {
@@ -1035,20 +1189,26 @@ td strong {
   right: 20px;
   bottom: 20px;
   z-index: 32;
-  width: 52px;
-  height: 52px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  width: 56px;
+  height: 56px;
+  border: 2px solid white;
   border-radius: 8px;
-  background: var(--text);
+  background: var(--accent-dark);
   color: white;
-  box-shadow: var(--shadow);
+  box-shadow: 0 12px 30px rgba(16, 43, 41, 0.28);
   cursor: pointer;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 900;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
 }
 
 .predictive-chat-launcher:hover {
-  background: var(--accent-dark);
+  background: #0b5f59;
+  box-shadow: 0 15px 34px rgba(16, 43, 41, 0.34);
+  transform: translateY(-2px);
 }
 
 .predictive-chat-launcher[aria-expanded="true"] {
@@ -1070,10 +1230,10 @@ td strong {
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   overflow: hidden;
   resize: both;
-  border: 1px solid var(--line);
+  border: 1px solid #bdcac7;
   border-radius: 8px;
-  background: white;
-  box-shadow: 0 24px 70px rgba(28, 37, 31, 0.24);
+  background: #f5f8f7;
+  box-shadow: 0 26px 72px rgba(23, 42, 40, 0.28);
 }
 
 .predictive-chat-panel[hidden],
@@ -1088,10 +1248,11 @@ td strong {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 64px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--line);
-  background: var(--surface-soft);
+  min-height: 68px;
+  padding: 13px 16px;
+  border-bottom: 1px solid #264c48;
+  background: #173b38;
+  color: white;
   cursor: move;
   touch-action: none;
   user-select: none;
@@ -1111,12 +1272,13 @@ td strong {
 }
 
 .predictive-chat-header strong {
-  font-size: 15px;
+  font-size: 16px;
+  font-weight: 850;
 }
 
 .predictive-chat-header span {
   margin-top: 3px;
-  color: var(--muted);
+  color: #c8d8d5;
   font-size: 11px;
 }
 
@@ -1136,6 +1298,17 @@ td strong {
   color: var(--text);
   cursor: pointer;
   font-weight: 750;
+}
+
+.predictive-chat-header-actions button {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+}
+
+.predictive-chat-header-actions button:hover {
+  border-color: rgba(255, 255, 255, 0.48);
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .predictive-chat-header-actions [data-chat-action="close"] {
@@ -1191,34 +1364,39 @@ td strong {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
-  padding: 14px;
-  background: #fbfcfb;
+  padding: 18px;
+  background: #eef3f2;
 }
 
 .predictive-chat-message {
-  max-width: 90%;
-  padding: 10px 11px;
-  border-radius: 6px;
+  max-width: 84%;
+  padding: 12px 14px;
+  border-radius: 8px;
   color: var(--text);
-  font-size: 13px;
-  line-height: 1.48;
+  font-size: 13.5px;
+  line-height: 1.52;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 .predictive-chat-message.assistant {
   align-self: flex-start;
+  border: 1px solid #d2ddda;
   border-left: 3px solid var(--accent);
   background: white;
+  box-shadow: 0 3px 10px rgba(23, 59, 56, 0.06);
 }
 
 .predictive-chat-message.user {
   align-self: flex-end;
-  background: var(--surface-soft);
+  max-width: 78%;
+  background: #285c57;
+  color: white;
+  box-shadow: 0 3px 10px rgba(23, 59, 56, 0.12);
 }
 
 .predictive-chat-message.waiting {
@@ -1229,23 +1407,29 @@ td strong {
   position: relative;
   z-index: 2;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 46px;
-  align-items: end;
-  gap: 8px;
-  padding: 12px;
-  border-top: 1px solid var(--line);
+  grid-template-columns: minmax(0, 1fr) 48px;
+  align-items: center;
+  gap: 10px;
+  min-height: 76px;
+  padding: 13px 14px;
+  border-top: 1px solid #cbd7d4;
   background: white;
+  box-shadow: 0 -5px 18px rgba(23, 59, 56, 0.06);
 }
 
 .predictive-chat-form textarea {
   width: 100%;
   min-height: 48px;
-  max-height: 144px;
+  height: 48px;
+  max-height: 48px;
   padding: 11px 12px;
-  border: 1px solid var(--line);
+  border: 1px solid #aebfbb;
   border-radius: 6px;
+  background: #f9fbfa;
   color: var(--text);
-  resize: vertical;
+  line-height: 24px;
+  resize: none;
+  overflow-y: auto;
 }
 
 .predictive-chat-form textarea:focus,
@@ -1256,14 +1440,29 @@ td strong {
 }
 
 .predictive-chat-form button {
-  width: 46px;
+  position: static;
+  align-self: center;
+  justify-self: center;
+  width: 48px;
   height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0;
+  border: 1px solid #0b5f59;
   border-radius: 6px;
   background: var(--accent-dark);
   color: white;
   cursor: pointer;
   font-size: 20px;
   font-weight: 800;
+  transition:
+    background 150ms ease,
+    transform 150ms ease;
+}
+
+.predictive-chat-form button:hover:not(:disabled) {
+  background: #0b5f59;
+  transform: translateY(-1px);
 }
 
 .predictive-chat-form button:disabled,
@@ -1377,10 +1576,24 @@ td strong {
   }
 
   .sidebar {
+    position: static;
+    height: auto;
     min-height: auto;
+    display: block;
+    overflow: visible;
     padding: 16px;
     border-right: 0;
     border-bottom: 1px solid var(--line);
+  }
+
+  .plant-notes-board {
+    height: auto;
+    max-height: none;
+    margin-top: 18px;
+  }
+
+  .plant-notes-list {
+    max-height: 260px;
   }
 
   .nav-section {
