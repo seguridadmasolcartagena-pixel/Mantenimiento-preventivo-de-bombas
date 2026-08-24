@@ -78,6 +78,12 @@ Anade una accion `Respuesta` con codigo `200`, cabecera `Content-Type: applicati
 
 Guarda el flujo, copia su URL HTTPS y pegala en `Asistente predictivo > Configurar` dentro de la aplicacion.
 
+Si el analisis completo puede superar los 120 segundos, abre `Configuracion` en la accion `Respuesta` y activa `Respuesta asincrona`. El chatbot admite el `202 Accepted`, sigue la cabecera `Location` y espera el resultado durante un maximo de cinco minutos. Para que el navegador pueda leer esas cabeceras, anade tambien:
+
+```text
+Access-Control-Expose-Headers: Location, Retry-After
+```
+
 ## Seguridad
 
 La URL firmada de un disparador anonimo puede verse desde el navegador. Para un piloto interno puede guardarse localmente como hace esta integracion. Para produccion, protege el disparador con Microsoft Entra ID o coloca un backend autenticado delante del flujo. No publiques la clave de OpenAI ni la incluyas en el repositorio.

@@ -42,6 +42,8 @@ La prediccion:
 
 La URL del flujo se guarda solo en el navegador desde `Configurar`. La clave de OpenAI no se introduce en la aplicacion. Consulta `CHATBOT_POWER_AUTOMATE.md` para crear el flujo.
 
+El cliente espera hasta 125 segundos una respuesta directa. Si Power Automate devuelve `202 Accepted` y una cabecera `Location`, el chatbot consulta automaticamente el estado durante un maximo de cinco minutos. Tambien conserva el `conversationId` devuelto por el flujo y muestra de forma segura el detalle de los errores HTTP.
+
 Pruebas del motor predictivo:
 
 ```bash
