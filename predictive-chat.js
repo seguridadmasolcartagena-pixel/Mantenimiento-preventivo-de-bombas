@@ -1,6 +1,10 @@
 const FLOW_URL_KEY = "gestor-bombas-predictive-chat-flow-url";
 const CHAT_HISTORY_KEY = "gestor-bombas-predictive-chat-history";
 const CONVERSATION_ID_KEY = "gestor-bombas-predictive-chat-conversation-id";
+const MAX_HISTORY_MESSAGES = 10;
+const DIRECT_REQUEST_TIMEOUT_MS = 125000;
+const ASYNC_MAX_WAIT_MS = 5 * 60 * 1000;
+const DEFAULT_POLL_DELAY_MS = 3000;
 
 let mounted = false;
 let getContext = () => ({});
@@ -23,8 +27,6 @@ export function mountPredictiveChat(options = {}) {
           <span id="predictiveChatCoverage"></span>
         </div>
         <div class="predictive-chat-header-actions">
-          <button type="button" data-chat-action="scroll-up" aria-label="Subir en la conversación" title="Subir en la conversación">↑</button>
-          <button type="button" data-chat-action="scroll-down" aria-label="Bajar en la conversación" title="Bajar en la conversación">↓</button>
           <button type="button" data-chat-action="configure">Configurar</button>
           <button type="button" data-chat-action="close" aria-label="Cerrar asistente">×</button>
         </div>
@@ -40,7 +42,7 @@ export function mountPredictiveChat(options = {}) {
           <button type="submit">Guardar</button>
         </div>
       </form>
-      <div class="predictive-chat-messages" id="predictiveChatMessages" aria-live="polite" aria-label="Historial de conversación" tabindex="0"></div>
+      <div class="predictive-chat-messages" id="predictiveChatMessages" aria-live="polite"></div>
       <form class="predictive-chat-form" id="predictiveChatForm">
         <textarea name="question" rows="2" maxlength="1200" placeholder="Pregunta sobre bombas y tendencias" required></textarea>
         <button type="submit" aria-label="Enviar pregunta" title="Enviar">↑</button>
@@ -53,8 +55,6 @@ export function mountPredictiveChat(options = {}) {
   root.querySelector("[data-chat-action='close']")?.addEventListener("click", closePanel);
   root.querySelector("[data-chat-action='configure']")?.addEventListener("click", openConfiguration);
   root.querySelector("[data-chat-action='cancel-config']")?.addEventListener("click", closeConfiguration);
-  root.querySelector("[data-chat-action='scroll-up']")?.addEventListener("click", () => scrollMessages(-1));
-  root.querySelector("[data-chat-action='scroll-down']")?.addEventListener("click", () => scrollMessages(1));
   root.querySelector("#predictiveChatConfig")?.addEventListener("submit", saveConfiguration);
   root.querySelector("#predictiveChatForm")?.addEventListener("submit", sendQuestion);
   renderMessages();
@@ -104,7 +104,7 @@ function saveConfiguration(event) {
   localStorage.setItem(FLOW_URL_KEY, url);
   sessionStorage.removeItem(CONVERSATION_ID_KEY);
   closeConfiguration();
-  appendMessage("assistant", "Conexión del asistente actualizada. Se iniciará una conversación nueva.");
+  appendMessage("assistant", "Conexión del asistente actualizada.");
 }
 
 async function sendQuestion(event) {
@@ -125,39 +125,139 @@ async function sendQuestion(event) {
   form.reset();
   setBusy(true);
 
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 100000);
   try {
-    const context = getContext() || {};
-    const response = await fetch(flowUrl, {
+    const history = messages
+      .filter((item) => item.role === "user" || item.role === "assistant")
+      .slice(-MAX_HISTORY_MESSAGES - 1, -1)
+      .map((item) => ({ role: item.role, content: item.content.slice(0, 2000) }));
+    const conversationId = sessionStorage.getItem(CONVERSATION_ID_KEY) || "";
+    const response = await fetchWithTimeout(flowUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        mensaje: question,
-        bomba: getPumpCode(context),
-        conversationId: loadConversationId(),
+        pregunta: question,
+        historial: history,
+        contexto: getContext(),
+        usuario: "gestor-bombas",
+        ...(conversationId ? { conversationId } : {}),
       }),
       credentials: "omit",
       referrerPolicy: "no-referrer",
-      signal: controller.signal,
-    });
-    if (!response.ok) throw new Error(`El flujo respondió con estado ${response.status}.`);
-
-    const result = await response.json();
-    const answer = String(result.respuesta || result.answer || "").trim();
+    }, DIRECT_REQUEST_TIMEOUT_MS);
+    const result = await resolveFlowResponse(response);
+    const answer = extractFlowAnswer(result);
     if (!answer) throw new Error("El flujo no devolvió el campo respuesta.");
-
-    const nextConversationId = String(result.conversationId || "").trim();
-    if (nextConversationId) persistConversationId(nextConversationId);
-
+    const nextConversationId = extractConversationId(result);
+    if (nextConversationId) sessionStorage.setItem(CONVERSATION_ID_KEY, nextConversationId);
     appendMessage("assistant", answer);
   } catch (error) {
-    const message = error.name === "AbortError" ? "La consulta ha superado el tiempo de espera." : error.message;
+    const message = error.name === "AbortError"
+      ? "Power Automate no devolvió una respuesta en 125 segundos. Activa la respuesta asíncrona del flujo para análisis más largos."
+      : error.message;
     appendMessage("assistant", `No se pudo completar el análisis: ${message}`);
   } finally {
-    window.clearTimeout(timeout);
     setBusy(false);
   }
+}
+
+async function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+async function resolveFlowResponse(response) {
+  if (response.status === 202) return pollAsyncFlow(response);
+
+  const payload = await readResponsePayload(response);
+  if (!response.ok) throw new Error(flowErrorMessage(response.status, payload));
+  return unwrapFlowPayload(payload);
+}
+
+async function pollAsyncFlow(initialResponse) {
+  const location = initialResponse.headers.get("Location");
+  if (!location) {
+    throw new Error("Power Automate aceptó el análisis, pero no devolvió la URL de seguimiento asíncrono.");
+  }
+
+  const deadline = Date.now() + ASYNC_MAX_WAIT_MS;
+  let delayMs = retryDelay(initialResponse);
+
+  while (Date.now() < deadline) {
+    await delay(delayMs);
+    const remainingMs = Math.max(1000, deadline - Date.now());
+    const response = await fetchWithTimeout(location, {
+      method: "GET",
+      credentials: "omit",
+      referrerPolicy: "no-referrer",
+    }, Math.min(30000, remainingMs));
+
+    if (response.status === 202) {
+      delayMs = retryDelay(response);
+      continue;
+    }
+
+    const payload = await readResponsePayload(response);
+    if (!response.ok) throw new Error(flowErrorMessage(response.status, payload));
+    return unwrapFlowPayload(payload);
+  }
+
+  throw new Error("El análisis sigue en curso después de cinco minutos. Revisa la ejecución en Power Automate.");
+}
+
+async function readResponsePayload(response) {
+  const text = await response.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+function unwrapFlowPayload(payload) {
+  return payload?.properties?.outputs?.body ?? payload?.outputs?.body ?? payload?.body ?? payload;
+}
+
+export function extractFlowAnswer(payload) {
+  const result = unwrapFlowPayload(payload);
+  if (typeof result === "string") return result.trim();
+  return String(result?.respuesta ?? result?.answer ?? result?.output_text ?? "").trim();
+}
+
+function extractConversationId(payload) {
+  const result = unwrapFlowPayload(payload);
+  return String(result?.conversationId ?? result?.conversation_id ?? "").trim();
+}
+
+function flowErrorMessage(status, payload) {
+  const result = unwrapFlowPayload(payload);
+  const detail = typeof result === "string"
+    ? result
+    : result?.error?.message ?? result?.message ?? result?.error?.code ?? "";
+  const safeDetail = sanitizeErrorDetail(detail);
+  return safeDetail ? `Power Automate respondió con estado ${status}: ${safeDetail}` : `Power Automate respondió con estado ${status}.`;
+}
+
+function sanitizeErrorDetail(value) {
+  return String(value ?? "")
+    .replace(/sk-[A-Za-z0-9_-]+/g, "[CLAVE OCULTA]")
+    .replace(/https?:\/\/\S+/g, "[URL OCULTA]")
+    .slice(0, 600)
+    .trim();
+}
+
+function retryDelay(response) {
+  const seconds = Number(response.headers.get("Retry-After"));
+  return Number.isFinite(seconds) ? Math.min(10000, Math.max(1000, seconds * 1000)) : DEFAULT_POLL_DELAY_MS;
+}
+
+function delay(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 function appendMessage(role, content) {
@@ -184,40 +284,6 @@ function renderMessages() {
     container.append(waiting);
   }
   container.scrollTop = container.scrollHeight;
-}
-
-function scrollMessages(direction) {
-  const container = document.querySelector("#predictiveChatMessages");
-  if (!container) return;
-  const distance = Math.max(180, Math.round(container.clientHeight * 0.75));
-  container.scrollBy({ top: distance * direction, behavior: "smooth" });
-  container.focus({ preventScroll: true });
-}
-
-function getPumpCode(context) {
-  const candidates = [
-    context?.selectedPump?.code,
-    context?.pump?.code,
-    context?.pumpCode,
-    context?.selectedPumpCode,
-  ];
-  return String(candidates.find((value) => value !== undefined && value !== null && String(value).trim()) || "").trim();
-}
-
-function loadConversationId() {
-  try {
-    return sessionStorage.getItem(CONVERSATION_ID_KEY) || "";
-  } catch {
-    return "";
-  }
-}
-
-function persistConversationId(value) {
-  try {
-    sessionStorage.setItem(CONVERSATION_ID_KEY, value);
-  } catch {
-    // The chat continues without conversation persistence if session storage is unavailable.
-  }
 }
 
 function updateCoverage() {
