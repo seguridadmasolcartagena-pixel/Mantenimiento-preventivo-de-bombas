@@ -234,8 +234,27 @@ function unwrapFlowPayload(payload) {
 
 export function extractFlowAnswer(payload) {
   const result = unwrapFlowPayload(payload);
-  if (typeof result === "string") return result.trim();
-  return String(result?.respuesta ?? result?.answer ?? result?.output_text ?? "").trim();
+  if (typeof result === "string") {
+    const text = result.trim();
+    if (!text) return "";
+    try {
+      return extractFlowAnswer(JSON.parse(text)) || text;
+    } catch {
+      return text;
+    }
+  }
+
+  const directAnswer = result?.respuesta ?? result?.answer ?? result?.output_text;
+  if (typeof directAnswer === "string" && directAnswer.trim()) return directAnswer.trim();
+
+  const response = result?.response ?? result;
+  const output = Array.isArray(response?.output) ? response.output : [];
+  for (const item of output) {
+    if (item?.type !== "message" || !Array.isArray(item.content)) continue;
+    const textPart = item.content.find((part) => part?.type === "output_text" && typeof part.text === "string");
+    if (textPart?.text?.trim()) return textPart.text.trim();
+  }
+  return "";
 }
 
 function extractConversationId(payload) {
