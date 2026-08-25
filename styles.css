@@ -1468,10 +1468,15 @@ td strong {
   transform: translateY(-1px);
 }
 
-.predictive-chat-form button:disabled,
-.predictive-chat-form textarea:disabled {
+.predictive-chat-form button:disabled {
   cursor: wait;
   opacity: 0.6;
+}
+
+.predictive-chat-form[aria-busy="true"] textarea {
+  visibility: visible;
+  cursor: text;
+  opacity: 1;
 }
 
 .toast.show {
