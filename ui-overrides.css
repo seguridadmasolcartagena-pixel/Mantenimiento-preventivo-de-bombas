@@ -68,17 +68,40 @@
   background: var(--danger-soft);
 }
 
-.plant-note-edit-modal {
-  width: min(520px, 100%);
+/* Incident action controls. */
+.incident {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: start;
 }
 
-.plant-note-edit-form {
+.incident-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/* Make maintenance controls explicit and visible. */
+.maintenance-actions {
+  display: flex !important;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.record-edit-modal {
+  width: min(560px, 100%);
+}
+
+.record-edit-form {
   display: grid;
   gap: 12px;
   margin-top: 18px;
 }
 
-.plant-note-edit-form label {
+.record-edit-form label {
   display: grid;
   gap: 6px;
   color: var(--muted);
@@ -86,16 +109,28 @@
   font-weight: 700;
 }
 
-.plant-note-edit-form textarea {
+.record-edit-form textarea {
   min-height: 130px;
   resize: vertical;
 }
 
-.plant-note-delete-preview {
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface-soft);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+.record-edit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+@media (max-width: 640px) {
+  .incident {
+    grid-template-columns: 1fr;
+  }
+
+  .incident-actions,
+  .maintenance-actions {
+    justify-content: flex-start;
+  }
+
+  .record-edit-grid {
+    grid-template-columns: 1fr;
+  }
 }
