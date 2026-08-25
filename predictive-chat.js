@@ -514,11 +514,21 @@ function initialSummary(summary) {
 function setBusy(value) {
   busy = value;
   const form = document.querySelector("#predictiveChatForm");
-  if (form) {
-    form.querySelector("textarea").disabled = value;
-    form.querySelector("button[type='submit']").disabled = value;
-  }
+  updateChatFormAvailability(form, value);
   renderMessages();
+  if (!value) {
+    window.requestAnimationFrame(() => form?.querySelector("textarea")?.focus({ preventScroll: true }));
+  }
+}
+
+export function updateChatFormAvailability(form, waiting) {
+  if (!form) return;
+  const textarea = form.querySelector("textarea");
+  const submitButton = form.querySelector("button[type='submit']");
+  form.setAttribute("aria-busy", String(waiting));
+  form.classList.toggle("is-busy", waiting);
+  if (textarea) textarea.disabled = false;
+  if (submitButton) submitButton.disabled = waiting;
 }
 
 function persistMessages() {
