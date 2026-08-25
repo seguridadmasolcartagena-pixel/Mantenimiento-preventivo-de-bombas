@@ -1,3 +1,32 @@
 .status-explain {
   display: none !important;
 }
+
+/* Keep the chat composer visible while the conversation grows. */
+.predictive-chat-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.predictive-chat-header,
+.predictive-chat-config,
+.predictive-chat-form {
+  flex: 0 0 auto;
+}
+
+.predictive-chat-messages {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.predictive-chat-form {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.predictive-chat-form textarea {
+  min-width: 0;
+}
