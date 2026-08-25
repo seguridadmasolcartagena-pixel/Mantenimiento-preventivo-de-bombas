@@ -30,3 +30,72 @@
 .predictive-chat-form textarea {
   min-width: 0;
 }
+
+/* Plant board edit/delete controls. */
+.plant-note footer {
+  flex-wrap: wrap;
+}
+
+.plant-note-actions {
+  display: flex;
+  gap: 5px;
+  margin-left: auto;
+}
+
+.plant-note-action {
+  min-height: 24px;
+  padding: 3px 7px;
+  border: 1px solid #c9d4d1;
+  border-radius: 5px;
+  background: #f7faf9;
+  color: #315651;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.plant-note-action:hover {
+  background: #e7f1ef;
+}
+
+.plant-note-action.delete {
+  border-color: #e5beb9;
+  background: #fff7f5;
+  color: var(--danger);
+}
+
+.plant-note-action.delete:hover {
+  background: var(--danger-soft);
+}
+
+.plant-note-edit-modal {
+  width: min(520px, 100%);
+}
+
+.plant-note-edit-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.plant-note-edit-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.plant-note-edit-form textarea {
+  min-height: 130px;
+  resize: vertical;
+}
+
+.plant-note-delete-preview {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
