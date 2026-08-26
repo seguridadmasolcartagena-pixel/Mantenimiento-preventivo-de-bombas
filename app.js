@@ -1,4 +1,3 @@
-import { recommendedThresholds } from "./thresholds.js";
 import { buildPredictiveContext } from "./predictive-engine.js";
 import { mountPredictiveChat } from "./predictive-chat.js?v=20260824-polished-chat";
 
@@ -773,24 +772,6 @@ function renderDetail(pump) {
   `;
 }
 
-function renderThresholdRecommendation(pump) {
-  const recommendation = recommendedThresholds();
-  const isReference = Number(pump.aviso) === recommendation.aviso && Number(pump.alarma) === recommendation.alarma;
-  const message = isReference
-    ? `Referencia aplicada: Aviso ${recommendation.aviso} y Alarma ${recommendation.alarma} mm/s RMS.`
-    : `Referencia general: Aviso ${recommendation.aviso} y Alarma ${recommendation.alarma} mm/s RMS. Esta bomba tiene un ajuste manual.`;
-
-  return `
-    <div class="threshold-recommendation full" id="thresholdRecommendation">
-      <div>
-        <strong>Umbrales orientativos</strong>
-        <span>${escapeHtml(message)} Los campos permanecen editables.</span>
-      </div>
-      <button class="button secondary button-small" type="button" id="applyRecommendedThresholds">Aplicar referencia 4/6</button>
-    </div>
-  `;
-}
-
 function renderPointSummary(point, item) {
   return `
     <div class="point-summary" style="--point-color: ${POINT_COLORS[point]}">
@@ -1433,7 +1414,6 @@ function bindEvents() {
   document.querySelector("#cancelResetHistory")?.addEventListener("click", cancelResetHistory);
   document.querySelector("#confirmResetHistory")?.addEventListener("click", confirmResetHistory);
   document.querySelector("#pumpForm")?.addEventListener("submit", saveSelectedPump);
-  document.querySelector("#applyRecommendedThresholds")?.addEventListener("click", applyThresholdRecommendation);
   document.querySelector("#incidentForm")?.addEventListener("submit", addIncident);
   document.querySelector("#importMeasures")?.addEventListener("click", () => document.querySelector("#measureFile")?.click());
   document.querySelector("#measureFile")?.addEventListener("change", importMeasurements);
@@ -1538,20 +1518,6 @@ function saveSelectedPump(event) {
   syncSharedData();
   render();
   showToast("Cambios guardados.");
-}
-
-function applyThresholdRecommendation() {
-  const form = document.querySelector("#pumpForm");
-  if (!form) return;
-
-  const recommendation = recommendedThresholds();
-  const note = document.querySelector("#thresholdRecommendation span");
-
-  form.elements.aviso.value = recommendation.aviso;
-  form.elements.alarma.value = recommendation.alarma;
-  if (note) {
-    note.textContent = `Aplicados Aviso ${recommendation.aviso} y Alarma ${recommendation.alarma} mm/s RMS. Puedes modificarlos manualmente antes de guardar.`;
-  }
 }
 
 function addIncident(event) {
