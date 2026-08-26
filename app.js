@@ -451,9 +451,9 @@ function render() {
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
-          <div class="brand-mark">V</div>
+          <img class="brand-logo" src="./assets/masol-logo.svg" alt="Masol Iberia Biofuel" />
           <div>
-            <h1>Vibracion Bombas</h1>
+            <h1>Mantenimiento preventivo de las bombas de la planta</h1>
             <p>Historial e incidencias</p>
           </div>
         </div>
