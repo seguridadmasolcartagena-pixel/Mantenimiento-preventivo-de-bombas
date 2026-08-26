@@ -23,7 +23,7 @@ Aplicacion web estatica para consultar el historial de vibraciones e incidencias
 
 Todas las bombas utilizan como referencia inicial Aviso a 4 mm/s RMS y Alarma a 6 mm/s RMS, independientemente del tipo, la potencia o el acople. La potencia nominal se conserva como informacion tecnica de la bomba y no modifica los umbrales.
 
-Las bombas nuevas y las que no tengan limites configurados reciben automaticamente la referencia 4/6. Los valores existentes y cualquier ajuste posterior permanecen editables. El boton `Aplicar referencia 4/6` permite recuperar los valores generales en cualquier momento.
+Las bombas nuevas y las que no tengan limites configurados reciben automaticamente la referencia 4/6. Los valores existentes y cualquier ajuste posterior permanecen editables.
 
 Los valores no sustituyen los limites del fabricante, la evaluacion del montaje, la tendencia historica ni los procedimientos de mantenimiento y seguridad de la planta.
 
