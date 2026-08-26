@@ -686,7 +686,6 @@ function renderDetail(pump) {
           Alarma (mm/s RMS)
           <input class="field" name="alarma" type="number" step="0.01" min="0" inputmode="decimal" value="${escapeHtml(pump.alarma ?? "")}" />
         </label>
-        ${renderThresholdRecommendation(pump)}
         <label class="full">
           Grupo de motor compartido
           <input class="field" name="motorGroup" list="motorGroupOptions" value="${escapeHtml(pump.motorGroup ?? "")}" />
