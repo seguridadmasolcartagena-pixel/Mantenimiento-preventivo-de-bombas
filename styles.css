@@ -514,39 +514,6 @@ button {
   font-weight: 800;
 }
 
-.threshold-recommendation {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 12px;
-  border: 1px solid #b8d8d3;
-  border-left: 4px solid var(--accent);
-  border-radius: 8px;
-  background: #f3faf8;
-}
-
-.threshold-recommendation strong,
-.threshold-recommendation span {
-  display: block;
-}
-
-.threshold-recommendation strong {
-  color: var(--text);
-}
-
-.threshold-recommendation span {
-  margin-top: 3px;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.threshold-recommendation .button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
 .pump-list {
   display: grid;
 }
@@ -1669,11 +1636,6 @@ td strong {
 
   .incident-meta {
     justify-items: start;
-  }
-
-  .threshold-recommendation {
-    align-items: stretch;
-    flex-direction: column;
   }
 
   .pump-row {
