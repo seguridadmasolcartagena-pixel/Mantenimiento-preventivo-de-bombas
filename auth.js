@@ -193,6 +193,17 @@
     await loadScript("./app.js?v=20260826-remove-threshold-banner", "module");
 
     installLogoutControl();
+    scheduleSessionExpiry();
+  }
+
+  function scheduleSessionExpiry() {
+    try {
+      const session = JSON.parse(sessionStorage.getItem(SESSION_KEY) || "null");
+      const remaining = SESSION_DURATION_MS - (Date.now() - Number(session?.createdAt || 0));
+      window.setTimeout(logout, Math.max(0, remaining));
+    } catch {
+      logout();
+    }
   }
 
   function loadScript(src, type = "text/javascript") {
