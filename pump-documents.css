@@ -1,3 +1,10 @@
+.global-documents-panel {
+  margin: -2px 0 22px;
+  padding: 18px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
 .pump-documents-heading {
   align-items: center;
 }
@@ -14,7 +21,7 @@
 
 .pump-document-upload-options {
   display: grid;
-  grid-template-columns: minmax(160px, 0.35fr) minmax(260px, 1fr);
+  grid-template-columns: minmax(200px, 0.65fr) minmax(150px, 0.35fr) minmax(260px, 1fr);
   gap: 10px;
   padding: 12px;
   border: 1px solid var(--line);
