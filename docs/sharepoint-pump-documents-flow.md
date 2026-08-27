@@ -1,11 +1,11 @@
 # Flujo documental de bombas en SharePoint
 
-La aplicacion utiliza un unico disparador HTTP de Power Automate para listar, subir y eliminar documentos. El flujo debe usar una biblioteca existente y una carpeta por codigo de bomba.
+La aplicación utiliza un único disparador HTTP de Power Automate para listar, subir y eliminar documentos. El flujo debe usar una biblioteca existente y una carpeta por código de bomba.
 
 ## Biblioteca recomendada
 
 - Biblioteca: `Documentacion_Bombas`
-- Carpeta raiz: `Bombas`
+- Carpeta raíz: `Bombas`
 - Subcarpeta: valor de `folderName`, por ejemplo `P-101A`
 - Columnas opcionales: `CodigoBomba`, `CategoriaDocumento`, `DescripcionDocumento`
 
@@ -35,7 +35,7 @@ Respuesta:
       "url": "https://tenant.sharepoint.com/...",
       "mimeType": "application/pdf",
       "size": 245760,
-      "category": "Ficha tecnica",
+      "category": "Ficha técnica",
       "description": "Datos del fabricante",
       "uploadedAt": "2026-08-27T08:00:00Z"
     }
@@ -54,7 +54,7 @@ Respuesta:
   "fileName": "Ficha_tecnica.pdf",
   "mimeType": "application/pdf",
   "size": 245760,
-  "category": "Ficha tecnica",
+  "category": "Ficha técnica",
   "description": "Datos del fabricante",
   "contentBase64": "JVBERi0x..."
 }
@@ -62,11 +62,11 @@ Respuesta:
 
 El flujo debe:
 
-1. Validar el codigo, el nombre y el tamano del archivo.
+1. Validar el código, el nombre y el tamaño del archivo.
 2. Crear `Bombas/<folderName>` si no existe.
 3. Usar SharePoint `Create file` con `base64ToBinary(triggerBody()?['contentBase64'])`.
-4. Guardar las columnas de categoria, descripcion y codigo de bomba.
-5. Responder con `{ "ok": true, "document": { ... } }` usando el mismo formato de la operacion de listado.
+4. Guardar las columnas de categoría, descripción y código de bomba.
+5. Responder con `{ "ok": true, "document": { ... } }` usando el mismo formato de la operación de listado.
 
 ### Eliminar
 
@@ -89,10 +89,10 @@ El flujo debe comprobar que el identificador pertenece a la carpeta de la bomba 
 4. Acciones del conector de SharePoint para la biblioteca configurada.
 5. Accion `Response` en todos los caminos, incluidos los errores.
 
-## Integracion con el agente
+## Integración con el agente
 
-La aplicacion envia en `contexto.documents` el identificador, nombre, categoria, descripcion y enlace de cada documento de la bomba seleccionada. El flujo del asistente debe usar esos identificadores para recuperar de SharePoint solo los documentos relacionados con la pregunta.
+La aplicación envía en `contexto.documents` el identificador, nombre, categoría, descripción y enlace de cada documento de la bomba seleccionada. El flujo del asistente debe usar esos identificadores para recuperar de SharePoint solo los documentos relacionados con la pregunta.
 
-Guardar el archivo no hace que un modelo pueda leerlo automaticamente. Para PDF, Word e imagenes se necesita un paso de extraccion o indexacion de texto, por ejemplo AI Builder, SharePoint Premium, Copilot Studio o un servicio documental equivalente. Para TXT y CSV se puede convertir directamente el contenido obtenido desde SharePoint.
+Guardar el archivo no hace que un modelo pueda leerlo automáticamente. Para PDF, Word e imágenes se necesita un paso de extracción o indexación de texto, por ejemplo AI Builder, SharePoint Premium, Copilot Studio o un servicio documental equivalente. Para TXT y CSV se puede convertir directamente el contenido obtenido desde SharePoint.
 
 No se deben incluir URL firmadas, credenciales ni claves en el repositorio.
