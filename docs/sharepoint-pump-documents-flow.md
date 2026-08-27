@@ -1,25 +1,34 @@
-# Flujo documental de bombas en SharePoint
+# Biblioteca documental global en SharePoint
 
-La aplicación utiliza un único disparador HTTP de Power Automate para listar, subir y eliminar documentos. El flujo debe usar una biblioteca existente y una carpeta por código de bomba.
+La aplicación utiliza un único disparador HTTP de Power Automate para listar, subir y eliminar documentos globales de planta. Los manuales pueden contener información de varias bombas y el agente debe poder consultarlos desde cualquier ficha.
 
-## Biblioteca recomendada
+## Estructura recomendada
+
+```text
+Documentacion_Bombas/
+└── Global/
+    ├── Originales/
+    │   └── 7D50-Finder-05_R0_A_1.pdf
+    └── Texto/
+        └── 7D50-Finder-05_R0_A_1.txt
+```
 
 - Biblioteca: `Documentacion_Bombas`
-- Carpeta raíz: `Bombas`
-- Subcarpeta: valor de `folderName`, por ejemplo `P-101A`
-- Columnas opcionales: `CodigoBomba`, `CategoriaDocumento`, `DescripcionDocumento`
+- Código enviado por la aplicación: `GLOBAL`
+- Carpeta enviada por la aplicación: `Global`
+- Columnas opcionales: `CategoriaDocumento`, `DescripcionDocumento`, `EstadoExtraccion`
 
-Los enlaces devueltos deben conservar los permisos de SharePoint. No se deben crear enlaces anonimos.
+Los enlaces devueltos deben conservar los permisos de SharePoint. No se deben crear enlaces anónimos.
 
-## Peticiones de la aplicacion
+## Peticiones de la aplicación
 
 ### Listar
 
 ```json
 {
   "action": "list",
-  "pumpCode": "P-101A",
-  "folderName": "P-101A"
+  "pumpCode": "GLOBAL",
+  "folderName": "Global"
 }
 ```
 
@@ -30,13 +39,13 @@ Respuesta:
   "ok": true,
   "documents": [
     {
-      "id": "identificador de SharePoint",
-      "name": "Ficha_tecnica.pdf",
+      "id": "identificador del archivo original",
+      "name": "7D50-Finder-05_R0_A_1.pdf",
       "url": "https://tenant.sharepoint.com/...",
       "mimeType": "application/pdf",
-      "size": 245760,
-      "category": "Ficha técnica",
-      "description": "Datos del fabricante",
+      "size": 15686902,
+      "category": "Manual",
+      "description": "Manual global Finder con planos y hojas de datos",
       "uploadedAt": "2026-08-27T08:00:00Z"
     }
   ]
@@ -48,51 +57,53 @@ Respuesta:
 ```json
 {
   "action": "upload",
-  "pumpCode": "P-101A",
-  "pumpName": "Bomba de proceso",
-  "folderName": "P-101A",
-  "fileName": "Ficha_tecnica.pdf",
+  "pumpCode": "GLOBAL",
+  "pumpName": "Documentación global de planta",
+  "folderName": "Global",
+  "fileName": "7D50-Finder-05_R0_A_1.pdf",
   "mimeType": "application/pdf",
-  "size": 245760,
-  "category": "Ficha técnica",
-  "description": "Datos del fabricante",
+  "size": 15686902,
+  "category": "Manual",
+  "description": "Manual global Finder con planos y hojas de datos",
   "contentBase64": "JVBERi0x..."
 }
 ```
 
 El flujo debe:
 
-1. Validar el código, el nombre y el tamaño del archivo.
-2. Crear `Bombas/<folderName>` si no existe.
+1. Validar el nombre, el formato y el tamaño del archivo.
+2. Guardar el original en `Global/Originales`.
 3. Usar SharePoint `Create file` con `base64ToBinary(triggerBody()?['contentBase64'])`.
-4. Guardar las columnas de categoría, descripción y código de bomba.
-5. Responder con `{ "ok": true, "document": { ... } }` usando el mismo formato de la operación de listado.
+4. Crear o actualizar su registro en `Indice_Documentos_Bombas` con estado `Pendiente`.
+5. Responder con `{ "ok": true, "document": { ... } }`.
 
 ### Eliminar
 
 ```json
 {
   "action": "delete",
-  "pumpCode": "P-101A",
-  "folderName": "P-101A",
-  "fileId": "identificador de SharePoint"
+  "pumpCode": "GLOBAL",
+  "folderName": "Global",
+  "fileId": "identificador del archivo original"
 }
 ```
 
-El flujo debe comprobar que el identificador pertenece a la carpeta de la bomba antes de ejecutar `Delete file` y responder con `{ "ok": true }`.
+El flujo debe eliminar el original, el `.txt` asociado y el registro del índice antes de responder con `{ "ok": true }`.
 
-## Estructura del flujo
+## Flujo de extracción
 
-1. Disparador `When an HTTP request is received`.
-2. Validacion de `action`, `pumpCode` y `folderName`.
-3. `Switch` sobre `action` con casos `list`, `upload` y `delete`.
-4. Acciones del conector de SharePoint para la biblioteca configurada.
-5. Accion `Response` en todos los caminos, incluidos los errores.
+Un segundo flujo, activado al crear o modificar un archivo en `Global/Originales`, debe:
+
+1. Convertir Word a PDF cuando sea necesario.
+2. Extraer el texto de PDF e imágenes mediante AI Builder.
+3. Leer directamente TXT y CSV.
+4. Guardar el resultado en `Global/Texto/<nombre-original>.txt`.
+5. Actualizar `Indice_Documentos_Bombas` con el identificador del `.txt`, la fecha y el estado `Listo`.
 
 ## Integración con el agente
 
-La aplicación envía en `contexto.documents` el identificador, nombre, categoría, descripción y enlace de cada documento de la bomba seleccionada. El flujo del asistente debe usar esos identificadores para recuperar de SharePoint solo los documentos relacionados con la pregunta.
+La aplicación envía los documentos globales en `contexto.documents` en todas las preguntas. El flujo del asistente debe localizar el registro del documento, obtener su `.txt` asociado y seleccionar solamente los fragmentos relacionados con la consulta o con el código de bomba mencionado.
 
-Guardar el archivo no hace que un modelo pueda leerlo automáticamente. Para PDF, Word e imágenes se necesita un paso de extracción o indexación de texto, por ejemplo AI Builder, SharePoint Premium, Copilot Studio o un servicio documental equivalente. Para TXT y CSV se puede convertir directamente el contenido obtenido desde SharePoint.
+El manual `7D50-Finder-05_R0_A_1.pdf` contiene 222 páginas, planos, hojas de especificaciones y manuales para múltiples equipos. El texto debe dividirse en fragmentos antes de enviarlo al modelo para evitar superar el límite de contexto.
 
 No se deben incluir URL firmadas, credenciales ni claves en el repositorio.
