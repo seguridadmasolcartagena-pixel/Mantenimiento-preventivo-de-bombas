@@ -18,7 +18,7 @@ const ACCEPTED_EXTENSIONS = new Set([
   "webp",
 ]);
 const DOCUMENT_CATEGORIES = [
-  "Ficha tecnica",
+  "Ficha técnica",
   "Manual",
   "Plano",
   "Certificado",
@@ -96,11 +96,11 @@ function renderDocumentsSection(section, message = "", isError = false) {
   section.innerHTML = `
     <div class="section-heading pump-documents-heading">
       <div>
-        <h4>Documentacion tecnica</h4>
+        <h4>Documentación técnica</h4>
         <span>${documents.length} documento${documents.length === 1 ? "" : "s"}</span>
       </div>
       <div class="pump-document-actions">
-        <button class="button secondary button-small" type="button" data-document-action="configure" ${busy ? "disabled" : ""}>Conexion</button>
+        <button class="button secondary button-small" type="button" data-document-action="configure" ${busy ? "disabled" : ""}>Conexión</button>
         <button class="button secondary button-small" type="button" data-document-action="refresh" ${configured && !busy ? "" : "disabled"}>Actualizar</button>
         <button class="button button-small" type="button" data-document-action="choose" ${configured && !busy ? "" : "disabled"}>Subir documento</button>
       </div>
@@ -123,7 +123,7 @@ function renderUploadControls() {
         </select>
       </label>
       <label>
-        Descripcion
+        Descripción
         <input class="field" id="documentDescription" maxlength="240" placeholder="Ej. Curva y datos del fabricante" ${busy ? "disabled" : ""} />
       </label>
       <input id="pumpDocumentFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.xlsm,.ppt,.pptx,.txt,.csv,.png,.jpg,.jpeg,.webp" hidden />
@@ -140,7 +140,7 @@ function renderConfigurationForm(configured) {
       </label>
       <div class="pump-document-config-actions">
         ${configured ? '<button class="button secondary button-small" type="button" data-document-action="cancel-config">Cancelar</button>' : ""}
-        <button class="button button-small" type="submit">Guardar conexion</button>
+        <button class="button button-small" type="submit">Guardar conexión</button>
       </div>
     </form>
   `;
@@ -209,7 +209,7 @@ function saveFlowConfiguration(event) {
   configurationOpen = false;
   loadedPumps.clear();
   const section = event.currentTarget.closest("#pumpDocumentsSection");
-  renderDocumentsSection(section, "Conexion documental guardada.");
+    renderDocumentsSection(section, "Conexión documental guardada.");
   void loadDocuments(section.dataset.pumpCode, section, { refresh: true });
 }
 
@@ -335,7 +335,7 @@ async function requestFlow(payload) {
   }
 
   if (!response.ok || data?.ok === false) {
-    throw new Error(data?.error || data?.message || `Power Automate devolvio el codigo ${response.status}.`);
+    throw new Error(data?.error || data?.message || `Power Automate devolvió el código ${response.status}.`);
   }
 
   return data;
@@ -344,8 +344,8 @@ async function requestFlow(payload) {
 function validateFile(file) {
   const extension = fileExtension(file.name);
   if (!ACCEPTED_EXTENSIONS.has(extension)) return "Tipo de archivo no admitido.";
-  if (file.size <= 0) return "El archivo esta vacio.";
-  if (file.size > MAX_FILE_SIZE) return "El archivo supera el limite de 20 MB.";
+  if (file.size <= 0) return "El archivo está vacío.";
+  if (file.size > MAX_FILE_SIZE) return "El archivo supera el límite de 20 MB.";
   return "";
 }
 
