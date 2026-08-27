@@ -1,3 +1,10 @@
+.global-documents-panel {
+  margin: -2px 0 22px;
+  padding: 18px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
 .pump-documents-heading {
   align-items: center;
 }
