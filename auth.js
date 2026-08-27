@@ -191,7 +191,7 @@
     await loadScript("./plant-notes-actions.js?v=20260825-record-actions-v2");
     await loadScript("./incident-actions.js?v=20260825-incident-actions-v3");
     await loadScript("./app.js?v=20260826-remove-threshold-banner", "module");
-    await loadScript("./pump-documents.js?v=20260827-single-library", "module");
+    await loadScript("./pump-upload-only.js?v=20260828-upload-only", "module");
 
     installLogoutControl();
     scheduleSessionExpiry();
