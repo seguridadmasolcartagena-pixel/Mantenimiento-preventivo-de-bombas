@@ -1,5 +1,4 @@
 const FLOW_URL_KEY = "gestor-bombas-documents-flow-url";
-const PUMPS_STORAGE_KEY = "gestor-bombas-v3";
 const GLOBAL_CODE = "GLOBAL";
 const DOCUMENTS_FOLDER_NAME = "Documentacion_Bombas";
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
@@ -8,13 +7,8 @@ const ACCEPTED_EXTENSIONS = new Set([
   "pdf", "doc", "docx", "xls", "xlsx", "xlsm", "ppt", "pptx",
   "txt", "csv", "png", "jpg", "jpeg", "webp",
 ]);
-const DOCUMENT_CATEGORIES = [
-  "Ficha técnica", "Manual", "Plano", "Certificado", "Informe", "Otro",
-];
-
 let configuredFlowUrl = loadFlowUrl();
 let configurationOpen = !configuredFlowUrl;
-let uploadOpen = false;
 let busy = false;
 let mountScheduled = false;
 let message = "";
@@ -70,25 +64,20 @@ function render(section) {
       </div>
       <div class="pump-document-actions">
         <button class="button secondary button-small" type="button" data-upload-action="configure" ${busy ? "disabled" : ""}>Conexión</button>
-        <button class="button button-small" type="button" data-upload-action="open-upload" ${configured && !busy ? "" : "disabled"}>${uploadOpen ? "Cancelar subida" : "Subir documento"}</button>
+        <button class="button button-small" type="button" data-upload-action="choose-file" ${configured && !busy ? "" : "disabled"}>Seleccionar archivo</button>
+        <input id="pumpDocumentFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.xlsm,.ppt,.pptx,.txt,.csv,.png,.jpg,.jpeg,.webp" hidden />
       </div>
     </div>
-    ${configurationOpen ? renderConfigurationForm() : uploadOpen ? renderUploadFields() : ""}
+    ${configurationOpen ? renderConfigurationForm() : ""}
     <p class="pump-documents-message ${messageIsError ? "error" : ""}" aria-live="polite">${escapeHtml(message)}</p>
   `;
 
   section.querySelectorAll("[data-upload-action='configure']").forEach((button) => {
     button.addEventListener("click", () => {
       configurationOpen = !configurationOpen;
-      uploadOpen = false;
       message = "";
       render(section);
     });
-  });
-  section.querySelector("[data-upload-action='open-upload']")?.addEventListener("click", () => {
-    uploadOpen = !uploadOpen;
-    message = "";
-    render(section);
   });
   section.querySelector("[data-upload-action='choose-file']")?.addEventListener("click", () => {
     section.querySelector("#pumpDocumentFile")?.click();
@@ -116,31 +105,6 @@ function renderConfigurationForm() {
   `;
 }
 
-function renderUploadFields() {
-  return `
-    <div class="pump-document-upload-options">
-      <label>
-        Destino
-        <select class="field" id="documentScope" ${busy ? "disabled" : ""}>
-          ${availableScopes().map((scope) => `<option value="${escapeHtml(scope.code)}">${escapeHtml(scope.label)}</option>`).join("")}
-        </select>
-      </label>
-      <label>
-        Tipo
-        <select class="field" id="documentCategory" ${busy ? "disabled" : ""}>
-          ${DOCUMENT_CATEGORIES.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join("")}
-        </select>
-      </label>
-      <label>
-        Descripción
-        <input class="field" id="documentDescription" maxlength="240" placeholder="Ej. Ficha técnica del fabricante" ${busy ? "disabled" : ""} />
-      </label>
-      <input id="pumpDocumentFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.xlsm,.ppt,.pptx,.txt,.csv,.png,.jpg,.jpeg,.webp" hidden />
-      <button class="button button-small" type="button" data-upload-action="choose-file" ${busy ? "disabled" : ""}>Seleccionar archivo</button>
-    </div>
-  `;
-}
-
 function saveConfiguration(event, section) {
   event.preventDefault();
   const url = String(new FormData(event.currentTarget).get("flowUrl") || "").trim();
@@ -154,7 +118,6 @@ function saveConfiguration(event, section) {
   localStorage.setItem(FLOW_URL_KEY, url);
   configuredFlowUrl = url;
   configurationOpen = false;
-  uploadOpen = false;
   message = "Conexión documental guardada.";
   messageIsError = false;
   render(section);
@@ -173,10 +136,7 @@ async function uploadDocument(event, section) {
     return;
   }
 
-  const scopeCode = String(section.querySelector("#documentScope")?.value || GLOBAL_CODE);
-  const scope = availableScopes().find((item) => item.code === scopeCode) || availableScopes()[0];
-  const category = String(section.querySelector("#documentCategory")?.value || "Otro");
-  const description = String(section.querySelector("#documentDescription")?.value || "").trim().slice(0, 240);
+  const scope = { code: GLOBAL_CODE, name: "Documentación global de planta" };
 
   busy = true;
   message = `Subiendo ${file.name}...`;
@@ -192,13 +152,12 @@ async function uploadDocument(event, section) {
       fileName: sanitizeFileName(file.name),
       mimeType: file.type || "application/octet-stream",
       size: file.size,
-      category,
-      description,
+      category: "",
+      description: "",
       contentBase64: await fileToBase64(file),
     });
     message = `${file.name} se ha guardado en SharePoint.`;
     messageIsError = false;
-    uploadOpen = false;
   } catch (error) {
     message = error.message || "No se pudo subir el documento.";
     messageIsError = true;
@@ -229,6 +188,9 @@ async function requestFlow(payload) {
         data = { message: text.slice(0, 300) };
       }
     }
+    if (response.status === 401) {
+      throw new Error('El flujo no autoriza la subida. En Power Automate selecciona "Cualquiera" en "Quién puede desencadenar el flujo", guarda y actualiza la URL en Conexión.');
+    }
     if (!response.ok || data?.ok === false) {
       throw new Error(data?.error || data?.message || `Power Automate devolvió el código ${response.status}.`);
     }
@@ -238,26 +200,6 @@ async function requestFlow(payload) {
     throw error;
   } finally {
     window.clearTimeout(timeout);
-  }
-}
-
-function availableScopes() {
-  const scopes = [{ code: GLOBAL_CODE, name: "Documentación global de planta", label: "Global - todas las bombas" }];
-  try {
-    const pumps = JSON.parse(localStorage.getItem(PUMPS_STORAGE_KEY) || "[]");
-    if (!Array.isArray(pumps)) return scopes;
-    return scopes.concat(
-      pumps
-        .map((pump) => ({
-          code: String(pump?.code || "").trim(),
-          name: String(pump?.name || "Bomba sin nombre").trim(),
-        }))
-        .filter((pump) => pump.code && pump.code !== GLOBAL_CODE)
-        .sort((a, b) => a.code.localeCompare(b.code, "es", { numeric: true, sensitivity: "base" }))
-        .map((pump) => ({ ...pump, label: `${pump.code} - ${pump.name}` })),
-    );
-  } catch {
-    return scopes;
   }
 }
 
