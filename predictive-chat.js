@@ -279,9 +279,7 @@ async function sendQuestion(event) {
   setBusy(true);
 
   try {
-    const baseContext = getContext() || {};
-    const documents = window.PumpDocuments?.getAgentContext?.(baseContext?.selectedPump?.code) || [];
-    const context = { ...baseContext, documents };
+    const context = getContext() || {};
     const history = messages
       .filter((item) => item.role === "user" || item.role === "assistant")
       .slice(-MAX_HISTORY_MESSAGES - 1, -1)
