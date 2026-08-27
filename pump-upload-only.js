@@ -1,6 +1,4 @@
 const FLOW_URL_KEY = "gestor-bombas-documents-flow-url";
-const GLOBAL_CODE = "GLOBAL";
-const DOCUMENTS_FOLDER_NAME = "Documentacion_Bombas";
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 120000;
 const ACCEPTED_EXTENSIONS = new Set([
@@ -60,7 +58,7 @@ function render(section) {
     <div class="section-heading pump-documents-heading">
       <div>
         <h4>Subir documentación</h4>
-        <span>Los archivos se guardan en SharePoint y no se muestran en la aplicación.</span>
+        <span>Los archivos se guardan en la carpeta documental de SharePoint y quedan disponibles para la integración con el asistente.</span>
       </div>
       <div class="pump-document-actions">
         <button class="button secondary button-small" type="button" data-upload-action="configure" ${busy ? "disabled" : ""}>Conexión</button>
@@ -136,8 +134,6 @@ async function uploadDocument(event, section) {
     return;
   }
 
-  const scope = { code: GLOBAL_CODE, name: "Documentación global de planta" };
-
   busy = true;
   message = `Subiendo ${file.name}...`;
   messageIsError = false;
@@ -145,18 +141,11 @@ async function uploadDocument(event, section) {
 
   try {
     await requestFlow({
-      action: "upload",
-      pumpCode: scope.code,
-      pumpName: scope.name,
-      folderName: DOCUMENTS_FOLDER_NAME,
-      fileName: sanitizeFileName(file.name),
-      mimeType: file.type || "application/octet-stream",
-      size: file.size,
-      category: "",
-      description: "",
-      contentBase64: await fileToBase64(file),
+      nombreArchivo: sanitizeFileName(file.name),
+      contenidoBase64: await fileToBase64(file),
+      tipoMime: file.type || "application/octet-stream",
     });
-    message = `${file.name} se ha guardado en SharePoint.`;
+    message = `${file.name} se ha guardado correctamente en SharePoint.`;
     messageIsError = false;
   } catch (error) {
     message = error.message || "No se pudo subir el documento.";
@@ -185,14 +174,14 @@ async function requestFlow(payload) {
       try {
         data = JSON.parse(text);
       } catch {
-        data = { message: text.slice(0, 300) };
+        data = { mensaje: text.slice(0, 300) };
       }
     }
     if (response.status === 401) {
-      throw new Error('El flujo no autoriza la subida. En Power Automate selecciona "Cualquiera" en "Quién puede desencadenar el flujo", guarda y actualiza la URL en Conexión.');
+      throw new Error('El flujo no autoriza la subida. Revisa en Power Automate quién puede desencadenar el flujo y vuelve a guardar la URL en Conexión.');
     }
     if (!response.ok || data?.ok === false) {
-      throw new Error(data?.error || data?.message || `Power Automate devolvió el código ${response.status}.`);
+      throw new Error(data?.error || data?.mensaje || data?.message || `Power Automate devolvió el código ${response.status}.`);
     }
     return data;
   } catch (error) {
