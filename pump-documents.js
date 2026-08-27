@@ -2,7 +2,7 @@ const FLOW_URL_KEY = "gestor-bombas-documents-flow-url";
 const CACHE_KEY = "gestor-bombas-documents-cache-v2";
 const PUMPS_STORAGE_KEY = "gestor-bombas-v3";
 const GLOBAL_CODE = "GLOBAL";
-const GLOBAL_FOLDER_NAME = "Global";
+const DOCUMENTS_FOLDER_NAME = "Documentos";
 const GLOBAL_LIBRARY_NAME = "Documentación global de planta";
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const ACCEPTED_EXTENSIONS = new Set([
@@ -97,7 +97,7 @@ function renderDocumentsSection(section, message = "", isError = false) {
   const scope = scopeDetails(managementScopeCode);
   section.dataset.pumpCode = scope.code;
   section.dataset.pumpName = scope.name;
-  section.dataset.folderName = scope.folderName;
+    section.dataset.folderName = DOCUMENTS_FOLDER_NAME;
   const pumpCode = scope.code;
   const documents = documentsByPump.get(pumpCode) || [];
   const configured = Boolean(getFlowUrl());
@@ -242,7 +242,7 @@ async function loadDocuments(pumpCode, section, { refresh = false } = {}) {
     const response = await requestFlow({
       action: "list",
       pumpCode,
-      folderName: section.dataset.folderName || GLOBAL_FOLDER_NAME,
+      folderName: DOCUMENTS_FOLDER_NAME,
     });
     const documents = normalizeDocuments(response?.documents || response?.value || []);
     documentsByPump.set(pumpCode, documents);
@@ -298,7 +298,7 @@ async function uploadDocument(event, section) {
       action: "upload",
       pumpCode,
       pumpName: section.dataset.pumpName,
-      folderName: section.dataset.folderName || GLOBAL_FOLDER_NAME,
+      folderName: DOCUMENTS_FOLDER_NAME,
       fileName: sanitizeFileName(file.name),
       mimeType: file.type || "application/octet-stream",
       size: file.size,
@@ -336,7 +336,7 @@ async function deleteDocument(documentId, section) {
     await requestFlow({
       action: "delete",
       pumpCode,
-      folderName: section.dataset.folderName || GLOBAL_FOLDER_NAME,
+      folderName: DOCUMENTS_FOLDER_NAME,
       fileId: documentId,
     });
     documentsByPump.set(
@@ -442,13 +442,13 @@ function availableScopes() {
       code: GLOBAL_CODE,
       name: GLOBAL_LIBRARY_NAME,
       label: "Global - todas las bombas",
-      folderName: GLOBAL_FOLDER_NAME,
+      folderName: DOCUMENTS_FOLDER_NAME,
     },
     ...loadAvailablePumps().map((pump) => ({
       code: pump.code,
       name: pump.name,
       label: `${pump.code} - ${pump.name}`,
-      folderName: sanitizeFolderName(pump.code),
+      folderName: DOCUMENTS_FOLDER_NAME,
     })),
   ];
 }
@@ -508,13 +508,6 @@ function isSecureUrl(value) {
 function safeUrl(value) {
   const url = String(value || "").trim();
   return isSecureUrl(url) ? url : "";
-}
-
-function sanitizeFolderName(value) {
-  return String(value || "")
-    .trim()
-    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "_")
-    .slice(0, 80) || "SIN-CODIGO";
 }
 
 function sanitizeFileName(value) {
