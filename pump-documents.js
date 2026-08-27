@@ -1,5 +1,8 @@
 const FLOW_URL_KEY = "gestor-bombas-documents-flow-url";
-const CACHE_KEY = "gestor-bombas-documents-cache-v1";
+const CACHE_KEY = "gestor-bombas-global-documents-cache-v1";
+const GLOBAL_CODE = "GLOBAL";
+const GLOBAL_FOLDER_NAME = "Global";
+const GLOBAL_LIBRARY_NAME = "Documentación global de planta";
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const ACCEPTED_EXTENSIONS = new Set([
   "pdf",
@@ -28,7 +31,6 @@ const DOCUMENT_CATEGORIES = [
 
 const documentsByPump = loadCache();
 const loadedPumps = new Set();
-let activePumpCode = "";
 let mountScheduled = false;
 let busy = false;
 let configurationOpen = false;
@@ -54,36 +56,27 @@ function scheduleMount(forceRefresh = false) {
 }
 
 function mountDocumentsSection(forceRefresh = false) {
-  const detailBody = document.querySelector("#pumpDetail .detail-body");
-  const codeInput = document.querySelector("#pumpForm input[name='code']");
-  if (!detailBody || !codeInput) return;
+  const main = document.querySelector(".main");
+  const workspace = main?.querySelector(".workspace");
+  if (!main || !workspace) return;
 
-  const pumpCode = String(codeInput.value || "").trim();
-  const pumpName = String(document.querySelector("#pumpForm input[name='name']")?.value || "").trim();
-  if (!pumpCode) return;
-
-  let section = detailBody.querySelector("#pumpDocumentsSection");
-  const needsMount = !section || section.dataset.pumpCode !== pumpCode;
+  let section = main.querySelector("#pumpDocumentsSection");
+  const needsMount = !section;
 
   if (needsMount) {
-    section?.remove();
     section = document.createElement("section");
     section.id = "pumpDocumentsSection";
-    section.className = "history-section pump-documents-section";
-    section.dataset.pumpCode = pumpCode;
-    section.dataset.pumpName = pumpName;
-
-    const incidents = [...detailBody.querySelectorAll(":scope > .history-section")].find(
-      (item) => item.querySelector("h4")?.textContent.trim() === "Incidencias",
-    );
-    detailBody.insertBefore(section, incidents || null);
-    activePumpCode = pumpCode;
+    section.className = "pump-documents-section global-documents-panel";
+    section.dataset.pumpCode = GLOBAL_CODE;
+    section.dataset.pumpName = GLOBAL_LIBRARY_NAME;
+    section.dataset.folderName = GLOBAL_FOLDER_NAME;
+    main.insertBefore(section, workspace);
     renderDocumentsSection(section);
   }
 
-  if (forceRefresh) loadedPumps.delete(pumpCode);
-  if (getFlowUrl() && !loadedPumps.has(pumpCode) && !busy) {
-    void loadDocuments(pumpCode, section, { refresh: forceRefresh });
+  if (forceRefresh) loadedPumps.delete(GLOBAL_CODE);
+  if (getFlowUrl() && !loadedPumps.has(GLOBAL_CODE) && !busy) {
+    void loadDocuments(GLOBAL_CODE, section, { refresh: forceRefresh });
   }
 }
 
@@ -96,8 +89,8 @@ function renderDocumentsSection(section, message = "", isError = false) {
   section.innerHTML = `
     <div class="section-heading pump-documents-heading">
       <div>
-        <h4>Documentación técnica</h4>
-        <span>${documents.length} documento${documents.length === 1 ? "" : "s"}</span>
+        <h4>Documentación global de planta</h4>
+        <span>${documents.length} documento${documents.length === 1 ? "" : "s"} disponible${documents.length === 1 ? "" : "s"}</span>
       </div>
       <div class="pump-document-actions">
         <button class="button secondary button-small" type="button" data-document-action="configure" ${busy ? "disabled" : ""}>Conexión</button>
@@ -148,7 +141,7 @@ function renderConfigurationForm(configured) {
 
 function renderDocumentList(documents) {
   if (!documents.length) {
-    return '<div class="empty-inline pump-documents-empty">No hay documentos vinculados a esta bomba.</div>';
+    return '<div class="empty-inline pump-documents-empty">No hay documentación global cargada.</div>';
   }
 
   return `
@@ -222,7 +215,7 @@ async function loadDocuments(pumpCode, section, { refresh = false } = {}) {
     const response = await requestFlow({
       action: "list",
       pumpCode,
-      folderName: sanitizeFolderName(pumpCode),
+      folderName: section.dataset.folderName || GLOBAL_FOLDER_NAME,
     });
     const documents = normalizeDocuments(response?.documents || response?.value || []);
     documentsByPump.set(pumpCode, documents);
@@ -257,7 +250,7 @@ async function uploadDocument(event, section) {
       action: "upload",
       pumpCode,
       pumpName: section.dataset.pumpName,
-      folderName: sanitizeFolderName(pumpCode),
+      folderName: section.dataset.folderName || GLOBAL_FOLDER_NAME,
       fileName: sanitizeFileName(file.name),
       mimeType: file.type || "application/octet-stream",
       size: file.size,
@@ -295,7 +288,7 @@ async function deleteDocument(documentId, section) {
     await requestFlow({
       action: "delete",
       pumpCode,
-      folderName: sanitizeFolderName(pumpCode),
+      folderName: section.dataset.folderName || GLOBAL_FOLDER_NAME,
       fileId: documentId,
     });
     documentsByPump.set(
@@ -371,8 +364,8 @@ function normalizeDocument(document) {
   };
 }
 
-function getAgentContext(pumpCode = activePumpCode) {
-  const documents = documentsByPump.get(String(pumpCode || "").trim()) || [];
+function getAgentContext() {
+  const documents = documentsByPump.get(GLOBAL_CODE) || [];
   return documents.slice(0, 30).map((document) => ({
     sharePointId: document.id,
     name: document.name,
