@@ -1,0 +1,139 @@
+.pump-documents-heading {
+  align-items: center;
+}
+
+.pump-document-actions,
+.pump-document-row-actions,
+.pump-document-config-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pump-document-upload-options {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.35fr) minmax(260px, 1fr);
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(247, 248, 245, 0.68);
+}
+
+.pump-document-upload-options label,
+.pump-document-config label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.pump-document-config {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(247, 248, 245, 0.68);
+}
+
+.pump-documents-message {
+  min-height: 20px;
+  margin: 9px 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pump-documents-message.error {
+  color: var(--danger);
+}
+
+.pump-document-list {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  overflow: hidden;
+}
+
+.pump-document-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px;
+}
+
+.pump-document-row + .pump-document-row {
+  border-top: 1px solid var(--line);
+}
+
+.pump-document-main {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.pump-document-main > div {
+  min-width: 0;
+}
+
+.pump-document-main strong,
+.pump-document-main p,
+.pump-document-main small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.pump-document-main p {
+  margin: 4px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pump-document-main small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.pump-document-type {
+  min-width: 44px;
+  padding: 5px 6px;
+  border-radius: 6px;
+  background: var(--surface-soft);
+  color: var(--accent-dark);
+  font-size: 10px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.pump-document-delete {
+  color: var(--danger) !important;
+}
+
+.pump-documents-empty {
+  margin-top: 0;
+}
+
+@media (max-width: 720px) {
+  .pump-document-upload-options,
+  .pump-document-config {
+    grid-template-columns: 1fr;
+  }
+
+  .pump-document-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .pump-document-row-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
