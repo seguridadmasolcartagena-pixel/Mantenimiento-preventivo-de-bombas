@@ -1,5 +1,6 @@
 const FLOW_URL_KEY = "gestor-bombas-documents-flow-url";
-const CACHE_KEY = "gestor-bombas-global-documents-cache-v1";
+const CACHE_KEY = "gestor-bombas-documents-cache-v2";
+const PUMPS_STORAGE_KEY = "gestor-bombas-v3";
 const GLOBAL_CODE = "GLOBAL";
 const GLOBAL_FOLDER_NAME = "Global";
 const GLOBAL_LIBRARY_NAME = "Documentación global de planta";
@@ -31,9 +32,11 @@ const DOCUMENT_CATEGORIES = [
 
 const documentsByPump = loadCache();
 const loadedPumps = new Set();
+const contextLoads = new Set();
 let mountScheduled = false;
 let busy = false;
 let configurationOpen = false;
+let managementScopeCode = GLOBAL_CODE;
 
 window.PumpDocuments = Object.freeze({
   getAgentContext,
@@ -67,30 +70,43 @@ function mountDocumentsSection(forceRefresh = false) {
     section = document.createElement("section");
     section.id = "pumpDocumentsSection";
     section.className = "pump-documents-section global-documents-panel";
-    section.dataset.pumpCode = GLOBAL_CODE;
-    section.dataset.pumpName = GLOBAL_LIBRARY_NAME;
-    section.dataset.folderName = GLOBAL_FOLDER_NAME;
     main.insertBefore(section, workspace);
     renderDocumentsSection(section);
   }
 
-  if (forceRefresh) loadedPumps.delete(GLOBAL_CODE);
-  if (getFlowUrl() && !loadedPumps.has(GLOBAL_CODE) && !busy) {
-    void loadDocuments(GLOBAL_CODE, section, { refresh: forceRefresh });
+  const scopeSignature = availableScopes().map((scope) => `${scope.code}:${scope.name}`).join("|");
+  if (section.dataset.scopeSignature !== scopeSignature) {
+    section.dataset.scopeSignature = scopeSignature;
+    if (!availableScopes().some((scope) => scope.code === managementScopeCode)) {
+      managementScopeCode = GLOBAL_CODE;
+    }
+    renderDocumentsSection(section);
   }
+
+  if (forceRefresh) loadedPumps.delete(managementScopeCode);
+  if (getFlowUrl() && !loadedPumps.has(managementScopeCode) && !busy) {
+    void loadDocuments(managementScopeCode, section, { refresh: forceRefresh });
+  }
+
+  const selectedPumpCode = selectedPumpCodeFromPage();
+  if (getFlowUrl() && selectedPumpCode) void loadDocumentsForContext(selectedPumpCode);
 }
 
 function renderDocumentsSection(section, message = "", isError = false) {
   if (!section) return;
-  const pumpCode = section.dataset.pumpCode;
+  const scope = scopeDetails(managementScopeCode);
+  section.dataset.pumpCode = scope.code;
+  section.dataset.pumpName = scope.name;
+  section.dataset.folderName = scope.folderName;
+  const pumpCode = scope.code;
   const documents = documentsByPump.get(pumpCode) || [];
   const configured = Boolean(getFlowUrl());
 
   section.innerHTML = `
     <div class="section-heading pump-documents-heading">
       <div>
-        <h4>Documentación global de planta</h4>
-        <span>${documents.length} documento${documents.length === 1 ? "" : "s"} disponible${documents.length === 1 ? "" : "s"}</span>
+        <h4>Biblioteca documental</h4>
+        <span>${documents.length} documento${documents.length === 1 ? "" : "s"} en ${escapeHtml(scope.label)}</span>
       </div>
       <div class="pump-document-actions">
         <button class="button secondary button-small" type="button" data-document-action="configure" ${busy ? "disabled" : ""}>Conexión</button>
@@ -109,6 +125,12 @@ function renderDocumentsSection(section, message = "", isError = false) {
 function renderUploadControls() {
   return `
     <div class="pump-document-upload-options">
+      <label>
+        Destino
+        <select class="field" id="documentScope" ${busy ? "disabled" : ""}>
+          ${availableScopes().map((scope) => `<option value="${escapeHtml(scope.code)}" ${scope.code === managementScopeCode ? "selected" : ""}>${escapeHtml(scope.label)}</option>`).join("")}
+        </select>
+      </label>
       <label>
         Tipo
         <select class="field" id="documentCategory" ${busy ? "disabled" : ""}>
@@ -141,7 +163,7 @@ function renderConfigurationForm(configured) {
 
 function renderDocumentList(documents) {
   if (!documents.length) {
-    return '<div class="empty-inline pump-documents-empty">No hay documentación global cargada.</div>';
+    return '<div class="empty-inline pump-documents-empty">No hay documentos en este destino.</div>';
   }
 
   return `
@@ -178,6 +200,11 @@ function bindSectionEvents(section) {
   });
   section.querySelector("[data-document-action='choose']")?.addEventListener("click", () => {
     section.querySelector("#pumpDocumentFile")?.click();
+  });
+  section.querySelector("#documentScope")?.addEventListener("change", (event) => {
+    managementScopeCode = event.target.value;
+    renderDocumentsSection(section);
+    if (getFlowUrl()) void loadDocuments(managementScopeCode, section, { refresh: true });
   });
   section.querySelector("#pumpDocumentFile")?.addEventListener("change", (event) => {
     void uploadDocument(event, section);
@@ -226,6 +253,27 @@ async function loadDocuments(pumpCode, section, { refresh = false } = {}) {
   } catch (error) {
     busy = false;
     renderDocumentsSection(section, error.message || "No se pudieron cargar los documentos.", true);
+  }
+}
+
+async function loadDocumentsForContext(pumpCode) {
+  if (!pumpCode || pumpCode === GLOBAL_CODE || loadedPumps.has(pumpCode) || contextLoads.has(pumpCode)) return;
+  contextLoads.add(pumpCode);
+
+  try {
+    const scope = scopeDetails(pumpCode);
+    const response = await requestFlow({
+      action: "list",
+      pumpCode: scope.code,
+      folderName: scope.folderName,
+    });
+    documentsByPump.set(pumpCode, normalizeDocuments(response?.documents || response?.value || []));
+    loadedPumps.add(pumpCode);
+    persistCache();
+  } catch (error) {
+    console.warn(`No se pudo cargar la documentación de ${pumpCode}.`, error);
+  } finally {
+    contextLoads.delete(pumpCode);
   }
 }
 
@@ -364,9 +412,17 @@ function normalizeDocument(document) {
   };
 }
 
-function getAgentContext() {
-  const documents = documentsByPump.get(GLOBAL_CODE) || [];
-  return documents.slice(0, 30).map((document) => ({
+function getAgentContext(pumpCode = "") {
+  const selectedCode = String(pumpCode || "").trim();
+  const globalDocuments = documentsByPump.get(GLOBAL_CODE) || [];
+  const pumpDocuments = selectedCode && selectedCode !== GLOBAL_CODE
+    ? documentsByPump.get(selectedCode) || []
+    : [];
+
+  return [
+    ...globalDocuments.map((document) => ({ ...document, scope: "global", scopeCode: GLOBAL_CODE })),
+    ...pumpDocuments.map((document) => ({ ...document, scope: "pump", scopeCode: selectedCode })),
+  ].slice(0, 40).map((document) => ({
     sharePointId: document.id,
     name: document.name,
     category: document.category,
@@ -375,7 +431,49 @@ function getAgentContext() {
     size: document.size,
     uploadedAt: document.uploadedAt,
     url: document.url,
+    scope: document.scope,
+    scopeCode: document.scopeCode,
   }));
+}
+
+function availableScopes() {
+  return [
+    {
+      code: GLOBAL_CODE,
+      name: GLOBAL_LIBRARY_NAME,
+      label: "Global - todas las bombas",
+      folderName: GLOBAL_FOLDER_NAME,
+    },
+    ...loadAvailablePumps().map((pump) => ({
+      code: pump.code,
+      name: pump.name,
+      label: `${pump.code} - ${pump.name}`,
+      folderName: sanitizeFolderName(pump.code),
+    })),
+  ];
+}
+
+function scopeDetails(code) {
+  return availableScopes().find((scope) => scope.code === code) || availableScopes()[0];
+}
+
+function loadAvailablePumps() {
+  try {
+    const pumps = JSON.parse(localStorage.getItem(PUMPS_STORAGE_KEY) || "[]");
+    return (Array.isArray(pumps) ? pumps : [])
+      .map((pump) => ({
+        code: String(pump?.code || "").trim(),
+        name: String(pump?.name || "Bomba sin nombre").trim(),
+      }))
+      .filter((pump) => pump.code && pump.code !== GLOBAL_CODE)
+      .sort((a, b) => a.code.localeCompare(b.code, "es", { numeric: true, sensitivity: "base" }));
+  } catch {
+    return [];
+  }
+}
+
+function selectedPumpCodeFromPage() {
+  return String(document.querySelector("#pumpForm input[name='code']")?.value || "").trim();
 }
 
 function loadCache() {
