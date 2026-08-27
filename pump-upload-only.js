@@ -14,6 +14,7 @@ const DOCUMENT_CATEGORIES = [
 
 let configuredFlowUrl = loadFlowUrl();
 let configurationOpen = !configuredFlowUrl;
+let uploadOpen = false;
 let busy = false;
 let mountScheduled = false;
 let message = "";
@@ -69,21 +70,27 @@ function render(section) {
       </div>
       <div class="pump-document-actions">
         <button class="button secondary button-small" type="button" data-upload-action="configure" ${busy ? "disabled" : ""}>Conexión</button>
-        <button class="button button-small" type="button" data-upload-action="choose" ${configured && !busy ? "" : "disabled"}>Subir documento</button>
+        <button class="button button-small" type="button" data-upload-action="open-upload" ${configured && !busy ? "" : "disabled"}>${uploadOpen ? "Cancelar subida" : "Subir documento"}</button>
       </div>
     </div>
-    ${configurationOpen ? renderConfigurationForm() : renderUploadFields()}
+    ${configurationOpen ? renderConfigurationForm() : uploadOpen ? renderUploadFields() : ""}
     <p class="pump-documents-message ${messageIsError ? "error" : ""}" aria-live="polite">${escapeHtml(message)}</p>
   `;
 
   section.querySelectorAll("[data-upload-action='configure']").forEach((button) => {
     button.addEventListener("click", () => {
       configurationOpen = !configurationOpen;
+      uploadOpen = false;
       message = "";
       render(section);
     });
   });
-  section.querySelector("[data-upload-action='choose']")?.addEventListener("click", () => {
+  section.querySelector("[data-upload-action='open-upload']")?.addEventListener("click", () => {
+    uploadOpen = !uploadOpen;
+    message = "";
+    render(section);
+  });
+  section.querySelector("[data-upload-action='choose-file']")?.addEventListener("click", () => {
     section.querySelector("#pumpDocumentFile")?.click();
   });
   section.querySelector("#pumpDocumentConfig")?.addEventListener("submit", (event) => {
@@ -129,6 +136,7 @@ function renderUploadFields() {
         <input class="field" id="documentDescription" maxlength="240" placeholder="Ej. Ficha técnica del fabricante" ${busy ? "disabled" : ""} />
       </label>
       <input id="pumpDocumentFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.xlsm,.ppt,.pptx,.txt,.csv,.png,.jpg,.jpeg,.webp" hidden />
+      <button class="button button-small" type="button" data-upload-action="choose-file" ${busy ? "disabled" : ""}>Seleccionar archivo</button>
     </div>
   `;
 }
@@ -146,6 +154,7 @@ function saveConfiguration(event, section) {
   localStorage.setItem(FLOW_URL_KEY, url);
   configuredFlowUrl = url;
   configurationOpen = false;
+  uploadOpen = false;
   message = "Conexión documental guardada.";
   messageIsError = false;
   render(section);
@@ -189,6 +198,7 @@ async function uploadDocument(event, section) {
     });
     message = `${file.name} se ha guardado en SharePoint.`;
     messageIsError = false;
+    uploadOpen = false;
   } catch (error) {
     message = error.message || "No se pudo subir el documento.";
     messageIsError = true;
