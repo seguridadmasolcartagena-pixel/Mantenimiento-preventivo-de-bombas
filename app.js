@@ -450,7 +450,7 @@ function render() {
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
-          <img class="brand-logo" src="./assets/masol-logo.svg" alt="Masol Iberia Biofuel" />
+          <img class="brand-logo" src="./assets/masol-cartagena-biofuel.png" alt="Masol Cartagena Biofuel" />
           <div>
             <h1>Mantenimiento preventivo de las bombas de la planta</h1>
             <p>Historial e incidencias</p>

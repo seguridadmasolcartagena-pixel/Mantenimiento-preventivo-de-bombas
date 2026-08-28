@@ -41,7 +41,7 @@
     app.innerHTML = `
       <main class="login-page">
         <section class="login-panel" aria-labelledby="loginTitle">
-          <img class="login-logo" src="./assets/masol-logo.svg" alt="Masol Iberia Biofuel" />
+          <img class="login-logo" src="./assets/masol-cartagena-biofuel.png" alt="Masol Cartagena Biofuel" />
           <div class="login-heading">
             <p>Acceso interno</p>
             <h1 id="loginTitle">Mantenimiento preventivo de las bombas de la planta</h1>
