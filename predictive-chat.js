@@ -1,4 +1,7 @@
 const FLOW_URL_KEY = "gestor-bombas-predictive-chat-flow-url";
+const FLOW_URL_VERSION_KEY = "gestor-bombas-predictive-chat-flow-url-version";
+const DEFAULT_FLOW_URL_VERSION = "20260831-direct-v1";
+const DEFAULT_FLOW_URL = "https://default65afa47b9e4e4ad28cfe30d4118f06.2e.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/04/workflows/82811405b023405ab7117b2c2fd4cdaf/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=FCT3tZK8_imXTMQ7efUf17h_P-IquCoewEJjZuYgeco";
 const CHAT_HISTORY_KEY = "gestor-bombas-predictive-chat-history";
 const CONVERSATION_ID_KEY = "gestor-bombas-predictive-chat-conversation-id";
 const CHAT_GEOMETRY_KEY = "gestor-bombas-predictive-chat-geometry";
@@ -238,7 +241,7 @@ function openConfiguration() {
   const form = document.querySelector("#predictiveChatConfig");
   if (!form) return;
   form.hidden = false;
-  form.elements.flowUrl.value = localStorage.getItem(FLOW_URL_KEY) || "";
+  form.elements.flowUrl.value = loadFlowUrl();
   form.elements.flowUrl.focus();
 }
 
@@ -267,7 +270,7 @@ async function sendQuestion(event) {
   const form = event.currentTarget;
   const question = String(new FormData(form).get("question") || "").trim();
   if (!question) return;
-  const flowUrl = localStorage.getItem(FLOW_URL_KEY) || "";
+  const flowUrl = loadFlowUrl();
   if (!isSecureUrl(flowUrl)) {
     openConfiguration();
     appendMessage("assistant", "Configura primero la URL HTTPS del flujo Power Automate.");
@@ -535,6 +538,19 @@ function loadMessages() {
     return Array.isArray(parsed) ? parsed.slice(-20) : [];
   } catch {
     return [];
+  }
+}
+
+function loadFlowUrl() {
+  try {
+    if (localStorage.getItem(FLOW_URL_VERSION_KEY) !== DEFAULT_FLOW_URL_VERSION) {
+      localStorage.setItem(FLOW_URL_KEY, DEFAULT_FLOW_URL);
+      localStorage.setItem(FLOW_URL_VERSION_KEY, DEFAULT_FLOW_URL_VERSION);
+    }
+    const savedUrl = String(localStorage.getItem(FLOW_URL_KEY) || "").trim();
+    return isSecureUrl(savedUrl) ? savedUrl : DEFAULT_FLOW_URL;
+  } catch {
+    return DEFAULT_FLOW_URL;
   }
 }
 
