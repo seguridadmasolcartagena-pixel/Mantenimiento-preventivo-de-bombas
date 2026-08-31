@@ -1,4 +1,7 @@
 const FLOW_URL_KEY = "gestor-bombas-documents-flow-url";
+const FLOW_URL_VERSION_KEY = "gestor-bombas-documents-flow-url-version";
+const DEFAULT_FLOW_URL_VERSION = "20260831-direct-v1";
+const DEFAULT_FLOW_URL = "https://default65afa47b9e4e4ad28cfe30d4118f06.2e.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/27/workflows/7275738c6cd249f9b5ef74764c13738e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=7DRW9AOkRKLGRKdw0zv65SIDATeG8QlE-g8KsqO1E4s";
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 120000;
 const ACCEPTED_EXTENSIONS = new Set([
@@ -201,8 +204,16 @@ function validateFile(file) {
 }
 
 function loadFlowUrl() {
-  const url = String(localStorage.getItem(FLOW_URL_KEY) || "").trim();
-  return isSecureUrl(url) ? url : "";
+  try {
+    if (localStorage.getItem(FLOW_URL_VERSION_KEY) !== DEFAULT_FLOW_URL_VERSION) {
+      localStorage.setItem(FLOW_URL_KEY, DEFAULT_FLOW_URL);
+      localStorage.setItem(FLOW_URL_VERSION_KEY, DEFAULT_FLOW_URL_VERSION);
+    }
+    const savedUrl = String(localStorage.getItem(FLOW_URL_KEY) || "").trim();
+    return isSecureUrl(savedUrl) ? savedUrl : DEFAULT_FLOW_URL;
+  } catch {
+    return DEFAULT_FLOW_URL;
+  }
 }
 
 function isSecureUrl(value) {
