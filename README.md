@@ -13,6 +13,7 @@ Aplicacion web estatica para consultar el historial de vibraciones e incidencias
 - Registro de mantenimientos por bomba con fecha, tipo, responsable y marcador visible en la grafica de vibracion.
 - Registro de frecuencia de variador por bomba y ronda, con filtro por bandas de 5 Hz y grafica vibracion-frecuencia.
 - Evolucion de CFPlus por punto de medida, integrada con el filtro de frecuencia y el historial importado del Fluke.
+- Umbrales editables de CF+ por bomba con referencia Fluke: Aviso 11 y Alarma 16, incluidos en el estado y en los correos de alerta.
 - Registro manual de incidencias por operario.
 - Eliminacion de bombas con confirmacion previa.
 - Reseteo de las medidas activas de una bomba con confirmacion previa, conservando el historico maestro.
@@ -22,6 +23,8 @@ Aplicacion web estatica para consultar el historial de vibraciones e incidencias
 ## Umbrales de referencia de planta
 
 Todas las bombas utilizan como referencia inicial Aviso a 4 mm/s RMS y Alarma a 6 mm/s RMS, independientemente del tipo, la potencia o el acople. La potencia nominal se conserva como informacion tecnica de la bomba y no modifica los umbrales.
+
+Para CF+, la referencia inicial sigue la escala del Fluke 805/805 FC: Aviso a 11 (entrada en Unsatisfactory) y Alarma a 16 (valor superior a 15, Unacceptable). Ambos limites se guardan por bomba y permanecen editables.
 
 Las bombas nuevas y las que no tengan limites configurados reciben automaticamente la referencia 4/6. Los valores existentes y cualquier ajuste posterior permanecen editables.
 

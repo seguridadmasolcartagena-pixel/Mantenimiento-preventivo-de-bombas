@@ -1,10 +1,23 @@
 (() => {
   const SAVE_FLOW_KEY = "gestor-bombas-config-save-flow-url";
-  const MEASUREMENT_POINTS = ["B-LA", "B-LOA", "M-LA", "M-LOA"];
+  const STANDARD_POINTS = ["B-LA", "B-LOA", "M-LA", "M-LOA"];
+  const PISTON_POINTS = ["M-LA", "M-LOA", "R", "A", "B"];
 
   function parseThreshold(value) {
     const number = Number(String(value ?? "").replace(",", "."));
     return Number.isFinite(number) && number > 0 ? number : null;
+  }
+
+  function parseOptionalNumber(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const number = Number(String(value).replace(",", "."));
+    return Number.isFinite(number) ? number : null;
+  }
+
+  function measurementPointsForPump(pump) {
+    const isPiston = String(pump.pumpType || "").toLowerCase().includes("pist");
+    const points = isPiston ? PISTON_POINTS : STANDARD_POINTS;
+    return pump.hasAxialMeasurement ? [...points, "M-AX"] : [...points];
   }
 
   function compareMeasurements(a, b) {
@@ -14,25 +27,52 @@
   }
 
   function latestMeasurementsByPoint(pump) {
-    const latest = Object.fromEntries(MEASUREMENT_POINTS.map((point) => [point, null]));
+    const points = measurementPointsForPump(pump);
+    const latest = Object.fromEntries(points.map((point) => [point, null]));
     for (const item of [...(pump.measurements || [])].sort(compareMeasurements)) {
-      if (MEASUREMENT_POINTS.includes(item.point)) latest[item.point] = item;
+      if (points.includes(item.point)) latest[item.point] = item;
     }
     return latest;
   }
 
+  function triggeredMeasurements(pump) {
+    const latestByPoint = latestMeasurementsByPoint(pump);
+    const vibrationWarning = parseThreshold(pump.aviso);
+    const vibrationAlarm = parseThreshold(pump.alarma);
+    const cfPlusWarning = parseThreshold(pump.cfPlusAviso);
+    const cfPlusAlarm = parseThreshold(pump.cfPlusAlarma);
+    const triggered = [];
+
+    for (const point of measurementPointsForPump(pump)) {
+      const item = latestByPoint[point];
+      if (!item) continue;
+
+      const vibration = Number(item.vibration);
+      if (Number.isFinite(vibration)) {
+        if (vibrationAlarm !== null && vibration >= vibrationAlarm) {
+          triggered.push({ metric: "Vibración", point, value: vibration, unit: item.unit || "mm/s", date: item.date || "", thresholdType: "Alarma", threshold: vibrationAlarm });
+        } else if (vibrationWarning !== null && vibration >= vibrationWarning) {
+          triggered.push({ metric: "Vibración", point, value: vibration, unit: item.unit || "mm/s", date: item.date || "", thresholdType: "Aviso", threshold: vibrationWarning });
+        }
+      }
+
+      const cfPlus = parseOptionalNumber(item.cfPlus);
+      if (cfPlus !== null) {
+        if (cfPlusAlarm !== null && cfPlus >= cfPlusAlarm) {
+          triggered.push({ metric: "CF+", point, value: cfPlus, unit: "CF+", date: item.date || "", thresholdType: "Alarma", threshold: cfPlusAlarm });
+        } else if (cfPlusWarning !== null && cfPlus >= cfPlusWarning) {
+          triggered.push({ metric: "CF+", point, value: cfPlus, unit: "CF+", date: item.date || "", thresholdType: "Aviso", threshold: cfPlusWarning });
+        }
+      }
+    }
+    return triggered;
+  }
+
   function calculatedPumpStatus(pump) {
-    if (pump.status === "Parada") return "Parada";
-
-    const latestValues = Object.values(latestMeasurementsByPoint(pump))
-      .filter(Boolean)
-      .map((item) => Number(item.vibration))
-      .filter((value) => Number.isFinite(value));
-    const alarmThreshold = parseThreshold(pump.alarma);
-    const warningThreshold = parseThreshold(pump.aviso);
-
-    if (alarmThreshold !== null && latestValues.some((value) => value > alarmThreshold)) return "Alarma";
-    if (warningThreshold !== null && latestValues.some((value) => value > warningThreshold)) return "Aviso";
+    if (pump.status === "Parada" || pump.status === "Mantenimiento") return pump.status;
+    const triggered = triggeredMeasurements(pump);
+    if (triggered.some((item) => item.thresholdType === "Alarma")) return "Alarma";
+    if (triggered.some((item) => item.thresholdType === "Aviso")) return "Aviso";
     return pump.status === "Aviso" || pump.status === "Alarma" ? pump.status : "Operativa";
   }
 
@@ -40,35 +80,30 @@
     const status = calculatedPumpStatus(pump);
     if (status !== "Aviso" && status !== "Alarma") return null;
 
-    const latestByPoint = latestMeasurementsByPoint(pump);
-    const warningThreshold = parseThreshold(pump.aviso);
-    const alarmThreshold = parseThreshold(pump.alarma);
-    const triggeredPoints = MEASUREMENT_POINTS.map((point) => {
-      const item = latestByPoint[point];
-      const value = Number(item?.vibration);
-      if (!item || !Number.isFinite(value)) return null;
-
-      if (alarmThreshold !== null && value > alarmThreshold) {
-        return { point, value, unit: item.unit || "mm/s", date: item.date || "", thresholdType: "Alarma", threshold: alarmThreshold };
-      }
-      if (warningThreshold !== null && value > warningThreshold) {
-        return { point, value, unit: item.unit || "mm/s", date: item.date || "", thresholdType: "Aviso", threshold: warningThreshold };
-      }
-      return null;
-    }).filter(Boolean);
-
+    const triggeredPoints = triggeredMeasurements(pump);
     if (!triggeredPoints.length) return null;
+
+    const metrics = [...new Set(triggeredPoints.map((item) => item.metric))];
+    const headline = [...triggeredPoints].sort((a, b) => {
+      const severity = Number(b.thresholdType === "Alarma") - Number(a.thresholdType === "Alarma");
+      if (severity !== 0) return severity;
+      return String(b.date).localeCompare(String(a.date));
+    })[0];
 
     return {
       id: pump.id,
       code: pump.code,
-      name: pump.name,
+      name: `${pump.name} · ${metrics.join(" y ")}`,
       area: pump.area,
       status,
       aviso: pump.aviso ?? "",
       alarma: pump.alarma ?? "",
+      cfPlusAviso: pump.cfPlusAviso ?? "",
+      cfPlusAlarma: pump.cfPlusAlarma ?? "",
+      alertMetric: metrics.join(" y "),
       triggeredPoints,
-      highestValue: Math.max(...triggeredPoints.map((item) => Number(item.value))),
+      highestValue: Number(headline.value),
+      highestUnit: headline.unit,
       latestDate: triggeredPoints.map((item) => item.date).sort().at(-1) || "",
     };
   }
@@ -76,11 +111,7 @@
   function withAlerts(body) {
     const data = JSON.parse(body);
     if (!Array.isArray(data?.pumps)) return body;
-
-    return JSON.stringify({
-      ...data,
-      alerts: data.pumps.map(pumpAlert).filter(Boolean),
-    });
+    return JSON.stringify({ ...data, alerts: data.pumps.map(pumpAlert).filter(Boolean) });
   }
 
   const originalFetch = window.fetch.bind(window);
@@ -88,7 +119,6 @@
     const saveUrl = localStorage.getItem(SAVE_FLOW_KEY);
     const url = typeof resource === "string" ? resource : resource?.url;
     const body = options?.body;
-
     if (saveUrl && url === saveUrl && typeof body === "string") {
       try {
         return originalFetch(resource, { ...options, body: withAlerts(body) });
@@ -96,7 +126,6 @@
         return originalFetch(resource, options);
       }
     }
-
     return originalFetch(resource, options);
   };
 })();

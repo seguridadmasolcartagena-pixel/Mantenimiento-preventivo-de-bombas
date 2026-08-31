@@ -192,6 +192,8 @@ function normalizePump(pump) {
     area: pump.area ?? "Sin asignar",
     aviso: String(pump.aviso ?? "").trim() || "4",
     alarma: String(pump.alarma ?? "").trim() || "6",
+    cfPlusAviso: String(pump.cfPlusAviso ?? "").trim() || "11",
+    cfPlusAlarma: String(pump.cfPlusAlarma ?? "").trim() || "16",
     motorGroup: String(pump.motorGroup ?? "").trim(),
     hasAxialMeasurement: Boolean(pump.hasAxialMeasurement),
     hasVfd: Boolean(pump.hasVfd),
@@ -369,20 +371,47 @@ function normalizeStatus(status) {
   return "Operativa";
 }
 
+function triggeredMeasurements(pump) {
+  const latestByPoint = latestMeasurementsByPoint(pump);
+  const vibrationWarning = parseThreshold(pump.aviso);
+  const vibrationAlarm = parseThreshold(pump.alarma);
+  const cfPlusWarning = parseThreshold(pump.cfPlusAviso);
+  const cfPlusAlarm = parseThreshold(pump.cfPlusAlarma);
+  const triggered = [];
+
+  for (const point of measurementPointsForPump(pump)) {
+    const item = latestByPoint[point];
+    if (!item) continue;
+
+    const vibration = Number(item.vibration);
+    if (Number.isFinite(vibration)) {
+      if (vibrationAlarm !== null && vibration >= vibrationAlarm) {
+        triggered.push({ metric: "Vibración", point, value: vibration, unit: item.unit || "mm/s", date: item.date || "", thresholdType: "Alarma", threshold: vibrationAlarm });
+      } else if (vibrationWarning !== null && vibration >= vibrationWarning) {
+        triggered.push({ metric: "Vibración", point, value: vibration, unit: item.unit || "mm/s", date: item.date || "", thresholdType: "Aviso", threshold: vibrationWarning });
+      }
+    }
+
+    const cfPlus = parseOptionalNumber(item.cfPlus);
+    if (cfPlus !== null) {
+      if (cfPlusAlarm !== null && cfPlus >= cfPlusAlarm) {
+        triggered.push({ metric: "CF+", point, value: cfPlus, unit: "CF+", date: item.date || "", thresholdType: "Alarma", threshold: cfPlusAlarm });
+      } else if (cfPlusWarning !== null && cfPlus >= cfPlusWarning) {
+        triggered.push({ metric: "CF+", point, value: cfPlus, unit: "CF+", date: item.date || "", thresholdType: "Aviso", threshold: cfPlusWarning });
+      }
+    }
+  }
+
+  return triggered;
+}
+
 function calculatedPumpStatus(pump) {
   const baseStatus = normalizeStatus(pump.status);
   if (baseStatus === "Parada" || baseStatus === "Mantenimiento") return baseStatus;
 
-  const latestByPoint = latestMeasurementsByPoint(pump);
-  const latestValues = Object.values(latestByPoint)
-    .filter(Boolean)
-    .map((item) => Number(item.vibration))
-    .filter((value) => Number.isFinite(value));
-  const alarmThreshold = parseThreshold(pump.alarma);
-  const warningThreshold = parseThreshold(pump.aviso);
-
-  if (alarmThreshold !== null && latestValues.some((value) => value >= alarmThreshold)) return "Alarma";
-  if (warningThreshold !== null && latestValues.some((value) => value >= warningThreshold)) return "Aviso";
+  const triggered = triggeredMeasurements(pump);
+  if (triggered.some((item) => item.thresholdType === "Alarma")) return "Alarma";
+  if (triggered.some((item) => item.thresholdType === "Aviso")) return "Aviso";
   if (baseStatus === "Aviso" || baseStatus === "Alarma") return baseStatus;
   return "Operativa";
 }
@@ -391,35 +420,30 @@ function pumpAlert(pump) {
   const status = calculatedPumpStatus(pump);
   if (status !== "Aviso" && status !== "Alarma") return null;
 
-  const latestByPoint = latestMeasurementsByPoint(pump);
-  const warningThreshold = parseThreshold(pump.aviso);
-  const alarmThreshold = parseThreshold(pump.alarma);
-  const triggeredPoints = measurementPointsForPump(pump).map((point) => {
-    const item = latestByPoint[point];
-    const value = Number(item?.vibration);
-    if (!item || !Number.isFinite(value)) return null;
-
-    if (alarmThreshold !== null && value >= alarmThreshold) {
-      return { point, value, unit: item.unit, date: item.date, thresholdType: "Alarma", threshold: alarmThreshold };
-    }
-    if (warningThreshold !== null && value >= warningThreshold) {
-      return { point, value, unit: item.unit, date: item.date, thresholdType: "Aviso", threshold: warningThreshold };
-    }
-    return null;
-  }).filter(Boolean);
-
+  const triggeredPoints = triggeredMeasurements(pump);
   if (!triggeredPoints.length) return null;
+
+  const metrics = [...new Set(triggeredPoints.map((item) => item.metric))];
+  const headline = [...triggeredPoints].sort((a, b) => {
+    const severity = Number(b.thresholdType === "Alarma") - Number(a.thresholdType === "Alarma");
+    if (severity !== 0) return severity;
+    return String(b.date).localeCompare(String(a.date));
+  })[0];
 
   return {
     id: pump.id,
     code: pump.code,
-    name: pump.name,
+    name: `${pump.name} · ${metrics.join(" y ")}`,
     area: pump.area,
     status,
     aviso: pump.aviso ?? "",
     alarma: pump.alarma ?? "",
+    cfPlusAviso: pump.cfPlusAviso ?? "",
+    cfPlusAlarma: pump.cfPlusAlarma ?? "",
+    alertMetric: metrics.join(" y "),
     triggeredPoints,
-    highestValue: Math.max(...triggeredPoints.map((item) => Number(item.value))),
+    highestValue: Number(headline.value),
+    highestUnit: headline.unit,
     latestDate: triggeredPoints.map((item) => item.date).sort().at(-1) || "",
   };
 }
@@ -685,6 +709,14 @@ function renderDetail(pump) {
           Alarma (mm/s RMS)
           <input class="field" name="alarma" type="number" step="0.01" min="0" inputmode="decimal" value="${escapeHtml(pump.alarma ?? "")}" />
         </label>
+        <label>
+          Aviso CF+
+          <input class="field" name="cfPlusAviso" type="number" step="0.01" min="0" inputmode="decimal" value="${escapeHtml(pump.cfPlusAviso ?? "")}" />
+        </label>
+        <label>
+          Alarma CF+
+          <input class="field" name="cfPlusAlarma" type="number" step="0.01" min="0" inputmode="decimal" value="${escapeHtml(pump.cfPlusAlarma ?? "")}" />
+        </label>
         <label class="full">
           Grupo de motor compartido
           <input class="field" name="motorGroup" list="motorGroupOptions" value="${escapeHtml(pump.motorGroup ?? "")}" />
@@ -713,7 +745,7 @@ function renderDetail(pump) {
           <span>Añadir medida axial del motor M-AX</span>
         </label>
         <div class="status-explain">
-          Estado actual: <strong>${escapeHtml(pumpStatus)}</strong>. Aviso y Alarma se calculan con los puntos configurados para esta bomba.
+          Estado actual: <strong>${escapeHtml(pumpStatus)}</strong>. Aviso y Alarma se calculan con la última vibración y CF+ de cada punto configurado.
         </div>
         <div class="detail-actions">
           <button class="button danger" type="button" id="deletePump">Eliminar bomba</button>
@@ -967,7 +999,11 @@ function renderCfPlusChart(pump, selectedBand = "all") {
   const pad = 38;
   const dates = [...new Set(items.map((item) => item.date))].slice(-10);
   const visibleItems = items.filter((item) => dates.includes(item.date));
-  const maxCfPlus = Math.max(1, ...visibleItems.map((item) => item.cfPlus));
+  const thresholds = [
+    { key: "aviso", label: "Aviso CF+", value: parseThreshold(pump.cfPlusAviso), color: "#d97706" },
+    { key: "alarma", label: "Alarma CF+", value: parseThreshold(pump.cfPlusAlarma), color: "#b42318" },
+  ].filter((threshold) => threshold.value !== null);
+  const maxCfPlus = Math.max(1, ...visibleItems.map((item) => item.cfPlus), ...thresholds.map((item) => item.value));
   const yTicks = Array.from({ length: 5 }, (_, index) => {
     const value = (maxCfPlus * (4 - index)) / 4;
     return { value, y: pad + (index * (height - pad * 2)) / 4 };
@@ -978,6 +1014,7 @@ function renderCfPlusChart(pump, selectedBand = "all") {
     return dates.length === 1 ? width / 2 : pad + (index * (width - pad * 2)) / (dates.length - 1);
   };
   const yForValue = (value) => height - pad - (value / maxCfPlus) * (height - pad * 2);
+  const thresholdLines = thresholds.map((threshold) => ({ ...threshold, y: yForValue(threshold.value) }));
   const series = measurementPoints.map((point) => {
     const chartPoints = visibleItems
       .filter((item) => item.point === point)
@@ -1000,6 +1037,18 @@ function renderCfPlusChart(pump, selectedBand = "all") {
         .join("")}
       <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" />
       <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}" />
+      ${thresholdLines
+        .map(
+          (threshold, index) => `
+            <g class="threshold-line cfplus-${threshold.key}">
+              <line x1="${pad}" y1="${threshold.y.toFixed(1)}" x2="${width - pad}" y2="${threshold.y.toFixed(1)}" style="stroke: ${threshold.color}" />
+              <text x="${width - pad - 6}" y="${(threshold.y - 6 - index * 2).toFixed(1)}" text-anchor="end" style="fill: ${threshold.color}">
+                ${threshold.label} ${threshold.value}
+              </text>
+            </g>
+          `,
+        )
+        .join("")}
       ${series
         .map(
           (line) => `
@@ -1472,6 +1521,8 @@ function addPump() {
     area: "Sin asignar",
     aviso: "4",
     alarma: "6",
+    cfPlusAviso: "11",
+    cfPlusAlarma: "16",
     motorGroup: "",
     hasAxialMeasurement: false,
     hasVfd: false,
@@ -1507,6 +1558,8 @@ function saveSelectedPump(event) {
     area: String(form.get("area") ?? "").trim(),
     aviso: String(form.get("aviso") ?? "").trim(),
     alarma: String(form.get("alarma") ?? "").trim(),
+    cfPlusAviso: String(form.get("cfPlusAviso") ?? "").trim(),
+    cfPlusAlarma: String(form.get("cfPlusAlarma") ?? "").trim(),
     motorGroup: String(form.get("motorGroup") ?? "").trim(),
     hasAxialMeasurement: form.get("hasAxialMeasurement") === "on",
     hasVfd: form.get("hasVfd") === "on",
@@ -1992,6 +2045,8 @@ function mergeMeasurements(rows, conditionMap = new Map()) {
         area: normalized.area || "Importada",
         aviso: "4",
         alarma: "6",
+        cfPlusAviso: "11",
+        cfPlusAlarma: "16",
         motorGroup: "",
         hasAxialMeasurement: false,
         hasVfd: Boolean(condition?.hasVfd),
