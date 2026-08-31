@@ -1,5 +1,5 @@
 import { buildPredictiveContext } from "./predictive-engine.js";
-import { mountPredictiveChat } from "./predictive-chat.js?v=20260824-polished-chat";
+import { mountPredictiveChat } from "./predictive-chat.js?v=20260831-direct-links";
 
 const STORAGE_KEY = "gestor-bombas-v3";
 const VIEWDATA_STORAGE_KEY = "gestor-bombas-viewdata-v1";
