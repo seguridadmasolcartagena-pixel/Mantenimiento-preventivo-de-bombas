@@ -1,4 +1,4 @@
-const CACHE_NAME = "masol-bombas-pwa-v4";
+const CACHE_NAME = "masol-bombas-pwa-v5";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -7,7 +7,7 @@ const APP_SHELL = [
   "./pwa.js?v=20260901-pwa-controls",
   "./auth.js?v=20260901-intuitive-controls",
   "./manifest.webmanifest",
-  "./app-icon.svg?v=20260901-corporate-identity",
+  "./app-icon.svg?v=20260901-corporate-pump",
   "./assets/masol-cartagena-biofuel.png"
 ];
 
