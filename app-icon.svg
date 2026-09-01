@@ -1,11 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
   <title id="title">Bombas Masol</title>
-  <desc id="desc">Emblema corporativo verde de Masol adaptado como icono de aplicación</desc>
+  <desc id="desc">Bomba centrífuga corporativa con el emblema geométrico de Masol</desc>
   <rect width="512" height="512" rx="72" fill="#00843e"/>
-  <g fill="#ffffff" fill-rule="evenodd">
-    <path d="M32 390 145 94l111 296h-48l-18-50h-92l-19 50H32Zm84-99h56l-28-82-28 82Z"/>
-    <path d="m256 390 111-296 113 296h-48l-19-50h-92l-18 50h-47Zm83-99h56l-28-82-28 82Z"/>
-    <path d="M82 319h124v20H82zM69 350h150v20H69zM57 381h174v20H57z"/>
-    <path d="M307 319h123v20H307zM294 350h149v20H294zM282 381h173v20H282z"/>
+  <g fill="none" stroke="#ffffff" stroke-width="30" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M66 274h79"/>
+    <path d="M328 250h108v-78h-72"/>
+    <circle cx="236" cy="274" r="94"/>
+    <path d="M158 374h178"/>
+    <path d="M188 373v39M309 373v39"/>
   </g>
+  <circle cx="236" cy="274" r="55" fill="#ffffff"/>
+  <circle cx="236" cy="274" r="42" fill="#00843e"/>
+  <path d="m195 291 20-43 21 43 21-43 20 43" fill="none" stroke="#ffffff" stroke-width="12" stroke-linecap="square" stroke-linejoin="miter"/>
+  <path d="M190 306h92" stroke="#ffffff" stroke-width="10"/>
 </svg>
