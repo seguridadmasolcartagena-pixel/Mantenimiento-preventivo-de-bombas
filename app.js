@@ -503,6 +503,14 @@ function render() {
             <p>Importa las medidas del equipo, registra incidencias de operacion y consulta la evolucion de cada bomba desde su ficha.</p>
           </div>
           <div class="toolbar">
+            <button class="toolbar-icon-button" id="refreshApp" type="button" title="Actualizar datos compartidos" aria-label="Actualizar datos compartidos">
+              <span class="toolbar-icon toolbar-icon-refresh" aria-hidden="true">↻</span>
+              <span class="sr-only">Actualizar datos compartidos</span>
+            </button>
+            <button class="toolbar-icon-button" id="installApp" type="button" title="Descargar aplicación" aria-label="Descargar aplicación" ${isStandaloneApp() ? "hidden" : ""}>
+              <span class="toolbar-icon toolbar-icon-download" aria-hidden="true">↓</span>
+              <span class="sr-only">Descargar aplicación</span>
+            </button>
             <input id="measureFile" type="file" accept=".xlsx,.xls,.xlsm" hidden />
             <button class="button secondary" id="importMeasures">Importar Excel</button>
             <button class="button secondary" id="downloadHistory">Descargar Excel maestro</button>
@@ -1426,6 +1434,8 @@ function bindEvents() {
     render();
   });
 
+  document.querySelector("#refreshApp")?.addEventListener("click", refreshApplication);
+  document.querySelector("#installApp")?.addEventListener("click", installApplication);
   document.querySelector("#addPump")?.addEventListener("click", addPump);
   document.querySelector("#deletePump")?.addEventListener("click", requestDeleteSelectedPump);
   document.querySelector("#resetPump")?.addEventListener("click", requestResetSelectedPump);
@@ -2714,6 +2724,23 @@ function confirmResetHistory() {
   syncSharedData();
   render();
   showToast("Historial reseteado.");
+}
+
+function isStandaloneApp() {
+  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+}
+
+async function refreshApplication() {
+  const button = document.querySelector("#refreshApp");
+  button?.setAttribute("aria-busy", "true");
+  button?.classList.add("is-updating");
+  if (button) button.disabled = true;
+  await loadSharedDataManually();
+}
+
+async function installApplication() {
+  const result = await window.MASOL_PWA?.requestInstall?.();
+  showToast(result?.message || "Abre el menú del navegador y selecciona Instalar aplicación o Añadir a pantalla de inicio.");
 }
 
 function showToast(message) {
