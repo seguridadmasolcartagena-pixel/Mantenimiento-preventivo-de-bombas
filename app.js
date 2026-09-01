@@ -503,14 +503,16 @@ function render() {
             <p>Importa las medidas del equipo, registra incidencias de operacion y consulta la evolucion de cada bomba desde su ficha.</p>
           </div>
           <div class="toolbar">
-            <button class="toolbar-icon-button" id="refreshApp" type="button" title="Actualizar datos compartidos" aria-label="Actualizar datos compartidos">
-              <span class="toolbar-icon toolbar-icon-refresh" aria-hidden="true">↻</span>
-              <span class="sr-only">Actualizar datos compartidos</span>
-            </button>
-            <button class="toolbar-icon-button" id="installApp" type="button" title="Descargar aplicación" aria-label="Descargar aplicación" ${isStandaloneApp() ? "hidden" : ""}>
-              <span class="toolbar-icon toolbar-icon-download" aria-hidden="true">↓</span>
-              <span class="sr-only">Descargar aplicación</span>
-            </button>
+            <div class="toolbar-app-actions" aria-label="Acciones de la aplicación">
+              <button class="toolbar-action-button toolbar-action-refresh" id="refreshApp" type="button" title="Volver a cargar los datos desde SharePoint">
+                <span class="toolbar-action-icon toolbar-icon-refresh" aria-hidden="true">↻</span>
+                <span class="toolbar-action-label" aria-live="polite">Actualizar datos</span>
+              </button>
+              <button class="toolbar-action-button toolbar-action-install" id="installApp" type="button" title="Instalar la aplicación en este dispositivo" ${isStandaloneApp() ? "hidden" : ""}>
+                <span class="toolbar-action-icon toolbar-icon-download" aria-hidden="true">↓</span>
+                <span class="toolbar-action-label">Instalar app</span>
+              </button>
+            </div>
             <input id="measureFile" type="file" accept=".xlsx,.xls,.xlsm" hidden />
             <button class="button secondary" id="importMeasures">Importar Excel</button>
             <button class="button secondary" id="downloadHistory">Descargar Excel maestro</button>
@@ -2732,10 +2734,22 @@ function isStandaloneApp() {
 
 async function refreshApplication() {
   const button = document.querySelector("#refreshApp");
+  const label = button?.querySelector(".toolbar-action-label");
   button?.setAttribute("aria-busy", "true");
   button?.classList.add("is-updating");
   if (button) button.disabled = true;
-  await loadSharedDataManually();
+  if (label) label.textContent = "Actualizando...";
+
+  try {
+    await loadSharedDataManually();
+  } finally {
+    const currentButton = document.querySelector("#refreshApp");
+    currentButton?.removeAttribute("aria-busy");
+    currentButton?.classList.remove("is-updating");
+    if (currentButton) currentButton.disabled = false;
+    const currentLabel = currentButton?.querySelector(".toolbar-action-label");
+    if (currentLabel) currentLabel.textContent = "Actualizar datos";
+  }
 }
 
 async function installApplication() {
