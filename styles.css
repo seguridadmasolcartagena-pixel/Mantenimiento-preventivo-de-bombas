@@ -326,47 +326,94 @@ button {
   flex-wrap: wrap;
 }
 
-.toolbar-icon-button {
-  width: 40px;
-  height: 40px;
-  flex: 0 0 40px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.86);
-  color: var(--text);
-  cursor: pointer;
+.toolbar-app-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 10px;
+  margin-right: 2px;
+  border-right: 1px solid var(--line);
 }
 
-.toolbar-icon-button:hover {
+.toolbar-action-button {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 800;
+  letter-spacing: 0;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.toolbar-action-button:hover {
+  transform: translateY(-1px);
+}
+
+.toolbar-action-button:focus-visible {
+  outline: 3px solid rgba(15, 118, 110, 0.24);
+  outline-offset: 2px;
+}
+
+.toolbar-action-button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+  transform: none;
+}
+
+.toolbar-action-button[hidden] {
+  display: none;
+}
+
+.toolbar-action-refresh {
+  background: white;
+  color: var(--text);
+}
+
+.toolbar-action-refresh:hover {
   border-color: var(--accent);
   background: var(--surface-soft);
   color: var(--accent-dark);
 }
 
-.toolbar-icon-button:disabled {
-  cursor: wait;
-  opacity: 0.6;
+.toolbar-action-install {
+  border-color: var(--accent-dark);
+  background: var(--accent-dark);
+  color: white;
+  box-shadow: 0 5px 14px rgba(15, 102, 88, 0.16);
 }
 
-.toolbar-icon-button[hidden] {
-  display: none;
+.toolbar-action-install:hover {
+  background: #0b5f59;
+  box-shadow: 0 7px 18px rgba(15, 102, 88, 0.22);
 }
 
-.toolbar-icon {
+.toolbar-action-icon {
   display: block;
-  font-size: 22px;
-  font-weight: 800;
+  flex: 0 0 auto;
+  font-size: 20px;
+  font-weight: 900;
   line-height: 1;
+}
+
+.toolbar-action-label {
+  white-space: nowrap;
 }
 
 .toolbar-icon-download {
   transform: translateY(-1px);
 }
 
-.toolbar-icon-button.is-updating .toolbar-icon-refresh {
+.toolbar-action-button.is-updating .toolbar-icon-refresh {
   animation: toolbar-refresh-spin 720ms linear infinite;
 }
 
@@ -1648,6 +1695,23 @@ td strong {
 
   .topbar h2 {
     font-size: 28px;
+  }
+
+  .toolbar {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .toolbar-app-actions {
+    width: 100%;
+    padding-right: 0;
+    margin-right: 0;
+    border-right: 0;
+  }
+
+  .toolbar-action-button {
+    flex: 1 1 0;
+    min-width: 0;
   }
 
   .nav-section,
