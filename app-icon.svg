@@ -1,7 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Bombas Masol">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Mantenimiento predictivo de bombas</title>
+  <desc id="desc">Bomba centrífuga industrial con tuberías y señal de vibración</desc>
   <rect width="512" height="512" rx="72" fill="#0f6658"/>
-  <circle cx="256" cy="256" r="132" fill="#ffffff"/>
-  <circle cx="256" cy="256" r="66" fill="#0f6658"/>
-  <path d="M256 124v62M256 326v62M124 256h62M326 256h62" stroke="#ffffff" stroke-width="34" stroke-linecap="round"/>
-  <path d="M388 230h62v52h-62zM62 230h62v52H62z" fill="#ffffff"/>
+  <path d="M62 122h54l20-35 29 70 31-70 22 35h76" fill="none" stroke="#f4c95d" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="none" stroke="#ffffff" stroke-width="30" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M78 275h70"/>
+    <path d="M328 251h94v-72h-64"/>
+    <circle cx="238" cy="275" r="92"/>
+    <path d="M172 370h165"/>
+    <path d="M194 367v34M309 367v34"/>
+  </g>
+  <circle cx="238" cy="275" r="39" fill="#ffffff"/>
+  <path d="M238 236c30 6 49 27 52 55-25 7-48 2-66-17 3-15 7-27 14-38Z" fill="#0f6658"/>
 </svg>
