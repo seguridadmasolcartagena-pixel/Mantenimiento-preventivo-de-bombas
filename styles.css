@@ -81,10 +81,26 @@ button {
   height: auto;
 }
 
+.app-identity {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.app-logo {
+  width: 54px;
+  height: 54px;
+  display: block;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(15, 102, 88, 0.2);
+}
+
 .brand h1 {
   margin: 0;
-  max-width: 230px;
-  font-size: 18px;
+  max-width: 170px;
+  font-size: 17px;
   line-height: 1.25;
 }
 
