@@ -423,6 +423,12 @@ button {
   transform: translateY(1px);
 }
 
+.pwa-control:disabled {
+  cursor: wait;
+  opacity: 0.64;
+  box-shadow: none;
+}
+
 .button.secondary {
   background: white;
   color: var(--text);
