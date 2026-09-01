@@ -1,5 +1,6 @@
 import { buildPredictiveContext } from "./predictive-engine.js";
 import { mountPredictiveChat } from "./predictive-chat.js?v=20260831-direct-links";
+import { normalizeCfPlusAlarm, recommendedCfPlusThresholds } from "./thresholds.js?v=20260901-cfplus-alarm-13";
 
 const STORAGE_KEY = "gestor-bombas-v3";
 const VIEWDATA_STORAGE_KEY = "gestor-bombas-viewdata-v1";
@@ -20,6 +21,8 @@ const PISTON_MEASUREMENT_POINTS = ["M-LA", "M-LOA", "R", "A", "B"];
 const MEASUREMENT_POINTS = [...new Set([...STANDARD_MEASUREMENT_POINTS, ...PISTON_MEASUREMENT_POINTS, "M-AX"])];
 const MOTOR_MEASUREMENT_POINTS = new Set(["M-LA", "M-LOA", "M-AX"]);
 const MAX_PLANT_NOTES = 100;
+const CFPLUS_ALARM_MIGRATION_KEY = "gestor-bombas-cfplus-alarm-13-v1";
+const CFPLUS_THRESHOLDS = recommendedCfPlusThresholds();
 const POINT_COLORS = {
   "B-LA": "#0f766e",
   "B-LOA": "#2563eb",
@@ -168,21 +171,31 @@ const app = document.querySelector("#app");
 
 function loadPumps() {
   const saved = localStorage.getItem(STORAGE_KEY);
-  if (!saved) return demoPumps.map(normalizePump);
+  const migrateLegacyCfPlusAlarm = localStorage.getItem(CFPLUS_ALARM_MIGRATION_KEY) !== "done";
+  let source = demoPumps;
 
-  if (!localStorage.getItem(LOCAL_UPDATED_AT_KEY)) {
-    localStorage.setItem(LOCAL_UPDATED_AT_KEY, new Date().toISOString());
+  if (saved) {
+    if (!localStorage.getItem(LOCAL_UPDATED_AT_KEY)) {
+      localStorage.setItem(LOCAL_UPDATED_AT_KEY, new Date().toISOString());
+    }
+
+    try {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) source = parsed;
+    } catch {
+      source = demoPumps;
+    }
   }
 
-  try {
-    const parsed = JSON.parse(saved);
-    return Array.isArray(parsed) ? parsed.map(normalizePump) : demoPumps.map(normalizePump);
-  } catch {
-    return demoPumps.map(normalizePump);
+  const pumps = source.map((pump) => normalizePump(pump, { migrateLegacyCfPlusAlarm }));
+  if (migrateLegacyCfPlusAlarm) {
+    localStorage.setItem(CFPLUS_ALARM_MIGRATION_KEY, "done");
+    if (saved) localStorage.setItem(STORAGE_KEY, JSON.stringify(pumps));
   }
+  return pumps;
 }
 
-function normalizePump(pump) {
+function normalizePump(pump, { migrateLegacyCfPlusAlarm = false } = {}) {
   return {
     id: pump.id ?? crypto.randomUUID(),
     code: pump.code ?? "",
@@ -192,8 +205,8 @@ function normalizePump(pump) {
     area: pump.area ?? "Sin asignar",
     aviso: String(pump.aviso ?? "").trim() || "4",
     alarma: String(pump.alarma ?? "").trim() || "6",
-    cfPlusAviso: String(pump.cfPlusAviso ?? "").trim() || "11",
-    cfPlusAlarma: String(pump.cfPlusAlarma ?? "").trim() || "16",
+    cfPlusAviso: String(pump.cfPlusAviso ?? "").trim() || String(CFPLUS_THRESHOLDS.aviso),
+    cfPlusAlarma: normalizeCfPlusAlarm(pump.cfPlusAlarma, { migrateLegacy: migrateLegacyCfPlusAlarm }),
     motorGroup: String(pump.motorGroup ?? "").trim(),
     hasAxialMeasurement: Boolean(pump.hasAxialMeasurement),
     hasVfd: Boolean(pump.hasVfd),
@@ -1537,7 +1550,7 @@ function addPump() {
     aviso: "4",
     alarma: "6",
     cfPlusAviso: "11",
-    cfPlusAlarma: "16",
+    cfPlusAlarma: String(CFPLUS_THRESHOLDS.alarma),
     motorGroup: "",
     hasAxialMeasurement: false,
     hasVfd: false,
@@ -2061,7 +2074,7 @@ function mergeMeasurements(rows, conditionMap = new Map()) {
         aviso: "4",
         alarma: "6",
         cfPlusAviso: "11",
-        cfPlusAlarma: "16",
+        cfPlusAlarma: String(CFPLUS_THRESHOLDS.alarma),
         motorGroup: "",
         hasAxialMeasurement: false,
         hasVfd: Boolean(condition?.hasVfd),
@@ -2240,7 +2253,7 @@ async function updateSharePointExcel() {
 function sharedDataPayload() {
   const updatedAt = localStorage.getItem(LOCAL_UPDATED_AT_KEY) || new Date().toISOString();
   return {
-    version: 2,
+    version: 3,
     updatedAt,
     source: "App mantenimiento preventivo de bombas",
     pumps: state.pumps,
@@ -2353,6 +2366,7 @@ function parseSharedDataPayload(payload) {
   }
 
   return {
+    version: Number(data.version) || 1,
     pumps: data.pumps,
     viewDataBlocks: Array.isArray(data.viewDataBlocks) ? data.viewDataBlocks : [],
     plantNotes: Array.isArray(data.plantNotes) ? data.plantNotes.map(normalizePlantNote).filter((note) => note.text) : null,
@@ -2375,7 +2389,8 @@ function decodeBase64Text(value) {
 }
 
 function applySharedData(sharedData) {
-  state.pumps = sharedData.pumps.map(normalizePump);
+  const migrateLegacyCfPlusAlarm = sharedData.version < 3;
+  state.pumps = sharedData.pumps.map((pump) => normalizePump(pump, { migrateLegacyCfPlusAlarm }));
   state.viewDataBlocks = sharedData.viewDataBlocks;
   if (Array.isArray(sharedData.plantNotes)) {
     state.plantNotes = sharedData.plantNotes.slice(0, MAX_PLANT_NOTES);
