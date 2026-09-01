@@ -1,0 +1,27 @@
+{
+  "name": "Mantenimiento preventivo de las bombas de la planta",
+  "short_name": "Bombas Masol",
+  "description": "Historial, incidencias y mantenimiento preventivo de bombas de Masol Cartagena Biofuel.",
+  "lang": "es",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f7f5",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "./assets/pwa-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./assets/pwa-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
