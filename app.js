@@ -475,9 +475,12 @@ function render() {
       <aside class="sidebar">
         <div class="brand">
           <img class="brand-logo" src="./assets/masol-cartagena-biofuel.png" alt="Masol Cartagena Biofuel" />
-          <div>
-            <h1>Mantenimiento preventivo de las bombas de la planta</h1>
-            <p>Historial e incidencias</p>
+          <div class="app-identity">
+            <img class="app-logo" src="./app-icon.svg?v=20260901-pump-identity" alt="" aria-hidden="true" />
+            <div>
+              <h1>Mantenimiento preventivo de las bombas de la planta</h1>
+              <p>Historial e incidencias</p>
+            </div>
           </div>
         </div>
         <nav class="nav-section" aria-label="Filtros por estado">
