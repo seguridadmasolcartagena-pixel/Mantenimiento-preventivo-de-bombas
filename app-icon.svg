@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Bombas Masol">
+  <rect width="512" height="512" rx="72" fill="#0f6658"/>
+  <circle cx="256" cy="256" r="132" fill="#ffffff"/>
+  <circle cx="256" cy="256" r="66" fill="#0f6658"/>
+  <path d="M256 124v62M256 326v62M124 256h62M326 256h62" stroke="#ffffff" stroke-width="34" stroke-linecap="round"/>
+  <path d="M388 230h62v52h-62zM62 230h62v52H62z" fill="#ffffff"/>
+</svg>
