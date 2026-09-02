@@ -208,7 +208,6 @@ function normalizePump(pump, { migrateLegacyCfPlusAlarm = false } = {}) {
     cfPlusAviso: String(pump.cfPlusAviso ?? "").trim() || String(CFPLUS_THRESHOLDS.aviso),
     cfPlusAlarma: normalizeCfPlusAlarm(pump.cfPlusAlarma, { migrateLegacy: migrateLegacyCfPlusAlarm }),
     motorGroup: String(pump.motorGroup ?? "").trim(),
-    hasAxialMeasurement: Boolean(pump.hasAxialMeasurement),
     hasVfd: Boolean(pump.hasVfd),
     lastFrequencyHz: parseOptionalNumber(pump.lastFrequencyHz),
     status: normalizeStatus(pump.status),
@@ -251,7 +250,7 @@ function normalizePumpType(value, name = "") {
 
 function measurementPointsForPump(pump) {
   const base = normalizePumpType(pump.pumpType, pump.name) === "Pistón" ? PISTON_MEASUREMENT_POINTS : STANDARD_MEASUREMENT_POINTS;
-  return pump.hasAxialMeasurement ? [...base, "M-AX"] : [...base];
+  return [...base, "M-AX"];
 }
 
 function markLocalDataUpdated() {
@@ -609,7 +608,7 @@ function renderPumpRow(pump) {
           <span class="tag">${escapeHtml(pump.pumpType)}</span>
           ${pump.powerKw === null ? "" : `<span class="tag">${pump.powerKw} kW</span>`}
           ${pump.hasVfd ? `<span class="tag">Variador</span>` : ""}
-          ${pump.hasAxialMeasurement ? `<span class="tag">M-AX</span>` : ""}
+          <span class="tag">M-AX</span>
           ${pump.motorGroup ? `<span class="tag">Motor ${escapeHtml(pump.motorGroup)}</span>` : ""}
         </div>
       </div>
@@ -765,10 +764,6 @@ function renderDetail(pump) {
         <label class="checkbox-field">
           <input name="hasVfd" type="checkbox" ${pump.hasVfd ? "checked" : ""} />
           <span>La bomba dispone de variador de frecuencia</span>
-        </label>
-        <label class="checkbox-field">
-          <input name="hasAxialMeasurement" type="checkbox" ${pump.hasAxialMeasurement ? "checked" : ""} />
-          <span>Añadir medida axial del motor M-AX</span>
         </label>
         <div class="status-explain">
           Estado actual: <strong>${escapeHtml(pumpStatus)}</strong>. Aviso y Alarma se calculan con la última vibración y CF+ de cada punto configurado.
@@ -1552,7 +1547,6 @@ function addPump() {
     cfPlusAviso: "11",
     cfPlusAlarma: String(CFPLUS_THRESHOLDS.alarma),
     motorGroup: "",
-    hasAxialMeasurement: false,
     hasVfd: false,
     lastFrequencyHz: null,
     status: "Operativa",
@@ -1589,7 +1583,6 @@ function saveSelectedPump(event) {
     cfPlusAviso: String(form.get("cfPlusAviso") ?? "").trim(),
     cfPlusAlarma: String(form.get("cfPlusAlarma") ?? "").trim(),
     motorGroup: String(form.get("motorGroup") ?? "").trim(),
-    hasAxialMeasurement: form.get("hasAxialMeasurement") === "on",
     hasVfd: form.get("hasVfd") === "on",
     status: String(form.get("status") ?? "Operativa"),
   };
@@ -2076,8 +2069,7 @@ function mergeMeasurements(rows, conditionMap = new Map()) {
         cfPlusAviso: "11",
         cfPlusAlarma: String(CFPLUS_THRESHOLDS.alarma),
         motorGroup: "",
-        hasAxialMeasurement: false,
-        hasVfd: Boolean(condition?.hasVfd),
+            hasVfd: Boolean(condition?.hasVfd),
         lastFrequencyHz: condition?.frequencyHz ?? null,
         status: "Operativa",
         measurements: [],
