@@ -931,9 +931,43 @@ textarea.field {
   font-size: 13px;
 }
 
+.chart-scroll {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 8px;
+  scrollbar-color: #6b7c75 #e6ebe7;
+  scrollbar-width: thin;
+  overscroll-behavior-inline: contain;
+}
+
+.chart-scroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.chart-scroll::-webkit-scrollbar {
+  height: 10px;
+}
+
+.chart-scroll::-webkit-scrollbar-track {
+  background: #e6ebe7;
+  border-radius: 5px;
+}
+
+.chart-scroll::-webkit-scrollbar-thumb {
+  background: #6b7c75;
+  border: 2px solid #e6ebe7;
+  border-radius: 5px;
+}
+
+.chart-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-dark);
+}
+
 .chart {
   display: block;
-  width: 100%;
+  width: max(100%, var(--chart-width, 680px));
   height: auto;
   min-height: 210px;
   border: 1px solid var(--line);
