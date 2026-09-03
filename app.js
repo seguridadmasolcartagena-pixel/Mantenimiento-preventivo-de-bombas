@@ -874,6 +874,11 @@ function renderFrequencyFilter(pump) {
   `;
 }
 
+function chartWidthForDates(dateCount, padding) {
+  const horizontalSpacing = 72;
+  return Math.max(680, padding * 2 + Math.max(1, dateCount - 1) * horizontalSpacing);
+}
+
 function renderChart(pump, selectedBand = "all") {
   const measurementPoints = measurementPointsForPump(pump);
   const allItems = [...pump.measurements]
@@ -892,12 +897,10 @@ function renderChart(pump, selectedBand = "all") {
     return `<div class="empty-inline">Todavia no hay medidas para graficar.</div>`;
   }
 
-  const width = 680;
   const height = 270;
   const pad = 58;
-  const dates = [...new Set([...items.map((item) => item.date), ...maintenanceEvents.map((item) => item.date)])]
-    .sort()
-    .slice(-10);
+  const dates = [...new Set([...items.map((item) => item.date), ...maintenanceEvents.map((item) => item.date)])].sort();
+  const width = chartWidthForDates(dates.length, pad);
   const visibleItems = items.filter((item) => dates.includes(item.date));
   const visibleMaintenance = maintenanceEvents.filter((item) => dates.includes(item.date));
   const thresholds = [
@@ -926,7 +929,8 @@ function renderChart(pump, selectedBand = "all") {
   });
 
   return `
-    <svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Grafica de vibracion">
+    <div class="chart-scroll" tabindex="0" aria-label="Desplazar grafica de vibracion horizontalmente">
+      <svg class="chart" style="--chart-width: ${width}px" viewBox="0 0 ${width} ${height}" role="img" aria-label="Grafica de vibracion">
       ${yTicks
         .map(
           (tick) => `
@@ -996,7 +1000,8 @@ function renderChart(pump, selectedBand = "all") {
       </g>
       <text x="${pad}" y="${height - 8}">${escapeHtml(dates[0])}</text>
       <text x="${width - pad}" y="${height - 8}" text-anchor="end">${escapeHtml(dates.at(-1))}</text>
-    </svg>
+      </svg>
+    </div>
   `;
 }
 
@@ -1015,10 +1020,10 @@ function renderCfPlusChart(pump, selectedBand = "all") {
     return `<div class="empty-inline">No hay valores CF+ disponibles${selectedBand === "all" ? "." : " en el rango de frecuencia seleccionado."}</div>`;
   }
 
-  const width = 680;
   const height = 250;
   const pad = 38;
-  const dates = [...new Set(items.map((item) => item.date))].slice(-10);
+  const dates = [...new Set(items.map((item) => item.date))];
+  const width = chartWidthForDates(dates.length, pad);
   const visibleItems = items.filter((item) => dates.includes(item.date));
   const thresholds = [
     { key: "aviso", label: "Aviso CF+", value: parseThreshold(pump.cfPlusAviso), color: "#d97706" },
@@ -1045,7 +1050,8 @@ function renderCfPlusChart(pump, selectedBand = "all") {
   });
 
   return `
-    <svg class="chart cfplus-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Evolucion de CFPlus">
+    <div class="chart-scroll" tabindex="0" aria-label="Desplazar grafica de CFPlus horizontalmente">
+      <svg class="chart cfplus-chart" style="--chart-width: ${width}px" viewBox="0 0 ${width} ${height}" role="img" aria-label="Evolucion de CFPlus">
       ${yTicks
         .map(
           (tick) => `
@@ -1100,7 +1106,8 @@ function renderCfPlusChart(pump, selectedBand = "all") {
       <text x="${pad + 4}" y="${pad - 9}">CF+</text>
       <text x="${pad}" y="${height - 9}">${escapeHtml(dates[0])}</text>
       <text x="${width - pad}" y="${height - 9}" text-anchor="end">${escapeHtml(dates.at(-1))}</text>
-    </svg>
+      </svg>
+    </div>
   `;
 }
 
