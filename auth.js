@@ -190,7 +190,7 @@
     await loadScript("./spanish-date-fix.js");
     await loadScript("./plant-notes-actions.js?v=20260825-record-actions-v2");
     await loadScript("./incident-actions.js?v=20260825-incident-actions-v3");
-    await loadScript("./app.js?v=20260901-cfplus-alarm-13", "module");
+    await loadScript("./app.js?v=20260904-chart-spacing-48", "module");
     await loadScript("./pump-upload-only.js?v=20260904-fixed-flow", "module");
 
     installLogoutControl();
