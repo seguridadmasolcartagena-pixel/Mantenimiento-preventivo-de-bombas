@@ -52,7 +52,16 @@
   window.MASOL_PWA = Object.freeze({ isStandalone, requestInstall });
 
   if ("serviceWorker" in navigator) {
-    const register = () => navigator.serviceWorker.register("./service-worker.js");
+    const register = async () => {
+      try {
+        const registration = await navigator.serviceWorker.register("./service-worker.js", {
+          updateViaCache: "none",
+        });
+        await registration.update();
+      } catch (error) {
+        console.warn("No se pudo actualizar la aplicación instalada.", error);
+      }
+    };
     if (document.readyState === "complete") void register();
     else window.addEventListener("load", () => void register(), { once: true });
   }
