@@ -1,6 +1,3 @@
-const FLOW_URL_KEY = "gestor-bombas-documents-flow-url";
-const FLOW_URL_VERSION_KEY = "gestor-bombas-documents-flow-url-version";
-const DEFAULT_FLOW_URL_VERSION = "20260831-direct-v1";
 const DEFAULT_FLOW_URL = "https://default65afa47b9e4e4ad28cfe30d4118f06.2e.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/27/workflows/7275738c6cd249f9b5ef74764c13738e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=7DRW9AOkRKLGRKdw0zv65SIDATeG8QlE-g8KsqO1E4s";
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 120000;
@@ -8,8 +5,6 @@ const ACCEPTED_EXTENSIONS = new Set([
   "pdf", "doc", "docx", "xls", "xlsx", "xlsm", "ppt", "pptx",
   "txt", "csv", "png", "jpg", "jpeg", "webp",
 ]);
-let configuredFlowUrl = loadFlowUrl();
-let configurationOpen = !configuredFlowUrl;
 let busy = false;
 let mountScheduled = false;
 let message = "";
@@ -56,7 +51,6 @@ function refreshUploadSection() {
 }
 
 function render(section) {
-  const configured = Boolean(configuredFlowUrl);
   section.innerHTML = `
     <div class="section-heading pump-documents-heading">
       <div>
@@ -64,64 +58,19 @@ function render(section) {
         <span>Los archivos se guardan en la carpeta documental de SharePoint y quedan disponibles para la integración con el asistente.</span>
       </div>
       <div class="pump-document-actions">
-        <button class="button secondary button-small" type="button" data-upload-action="configure" ${busy ? "disabled" : ""}>Conexión</button>
-        <button class="button button-small" type="button" data-upload-action="choose-file" ${configured && !busy ? "" : "disabled"}>Seleccionar archivo</button>
+        <button class="button button-small" type="button" data-upload-action="choose-file" ${busy ? "disabled" : ""}>Seleccionar archivo</button>
         <input id="pumpDocumentFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.xlsm,.ppt,.pptx,.txt,.csv,.png,.jpg,.jpeg,.webp" hidden />
       </div>
     </div>
-    ${configurationOpen ? renderConfigurationForm() : ""}
     <p class="pump-documents-message ${messageIsError ? "error" : ""}" aria-live="polite">${escapeHtml(message)}</p>
   `;
 
-  section.querySelectorAll("[data-upload-action='configure']").forEach((button) => {
-    button.addEventListener("click", () => {
-      configurationOpen = !configurationOpen;
-      message = "";
-      render(section);
-    });
-  });
   section.querySelector("[data-upload-action='choose-file']")?.addEventListener("click", () => {
     section.querySelector("#pumpDocumentFile")?.click();
-  });
-  section.querySelector("#pumpDocumentConfig")?.addEventListener("submit", (event) => {
-    saveConfiguration(event, section);
   });
   section.querySelector("#pumpDocumentFile")?.addEventListener("change", (event) => {
     void uploadDocument(event, section);
   });
-}
-
-function renderConfigurationForm() {
-  return `
-    <form class="pump-document-config" id="pumpDocumentConfig">
-      <label>
-        URL del flujo documental de Power Automate
-        <input class="field" type="url" name="flowUrl" value="${escapeHtml(configuredFlowUrl)}" placeholder="https://..." autocomplete="off" required />
-      </label>
-      <div class="pump-document-config-actions">
-        ${configuredFlowUrl ? '<button class="button secondary button-small" type="button" data-upload-action="configure">Cancelar</button>' : ""}
-        <button class="button button-small" type="submit">Guardar conexión</button>
-      </div>
-    </form>
-  `;
-}
-
-function saveConfiguration(event, section) {
-  event.preventDefault();
-  const url = String(new FormData(event.currentTarget).get("flowUrl") || "").trim();
-  if (!isSecureUrl(url)) {
-    message = "La URL debe comenzar por https://";
-    messageIsError = true;
-    render(section);
-    return;
-  }
-
-  localStorage.setItem(FLOW_URL_KEY, url);
-  configuredFlowUrl = url;
-  configurationOpen = false;
-  message = "Conexión documental guardada.";
-  messageIsError = false;
-  render(section);
 }
 
 async function uploadDocument(event, section) {
@@ -164,7 +113,7 @@ async function requestFlow(payload) {
   const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    const response = await fetch(configuredFlowUrl, {
+    const response = await fetch(DEFAULT_FLOW_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -181,7 +130,7 @@ async function requestFlow(payload) {
       }
     }
     if (response.status === 401) {
-      throw new Error('El flujo no autoriza la subida. Revisa en Power Automate quién puede desencadenar el flujo y vuelve a guardar la URL en Conexión.');
+      throw new Error("El flujo no autoriza la subida. Revisa en Power Automate quién puede desencadenarlo.");
     }
     if (!response.ok || data?.ok === false) {
       throw new Error(data?.error || data?.mensaje || data?.message || `Power Automate devolvió el código ${response.status}.`);
@@ -201,27 +150,6 @@ function validateFile(file) {
   if (file.size <= 0) return "El archivo está vacío.";
   if (file.size > MAX_FILE_SIZE) return "El archivo supera el límite de 20 MB.";
   return "";
-}
-
-function loadFlowUrl() {
-  try {
-    if (localStorage.getItem(FLOW_URL_VERSION_KEY) !== DEFAULT_FLOW_URL_VERSION) {
-      localStorage.setItem(FLOW_URL_KEY, DEFAULT_FLOW_URL);
-      localStorage.setItem(FLOW_URL_VERSION_KEY, DEFAULT_FLOW_URL_VERSION);
-    }
-    const savedUrl = String(localStorage.getItem(FLOW_URL_KEY) || "").trim();
-    return isSecureUrl(savedUrl) ? savedUrl : DEFAULT_FLOW_URL;
-  } catch {
-    return DEFAULT_FLOW_URL;
-  }
-}
-
-function isSecureUrl(value) {
-  try {
-    return new URL(value).protocol === "https:";
-  } catch {
-    return false;
-  }
 }
 
 function sanitizeFileName(value) {
