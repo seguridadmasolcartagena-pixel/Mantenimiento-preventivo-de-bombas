@@ -875,7 +875,7 @@ function renderFrequencyFilter(pump) {
 }
 
 function chartWidthForDates(dateCount, padding) {
-  const horizontalSpacing = 72;
+  const horizontalSpacing = 48;
   return Math.max(680, padding * 2 + Math.max(1, dateCount - 1) * horizontalSpacing);
 }
 
