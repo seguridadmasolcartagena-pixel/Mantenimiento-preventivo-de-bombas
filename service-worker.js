@@ -1,11 +1,11 @@
-const CACHE_NAME = "masol-bombas-pwa-v8";
+const CACHE_NAME = "masol-bombas-pwa-v9";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./styles.css?v=20260901-intuitive-controls",
   "./auth.css?v=20260826-shared-login",
-  "./pwa.js?v=20260904-force-update",
-  "./auth.js?v=20260904-chart-spacing-48",
+  "./pwa.js?v=20261112-period-filter-v2",
+  "./auth.js?v=20261112-period-filter-v2",
   "./manifest.webmanifest",
   "./app-icon.svg?v=20260901-corporate-pump",
   "./assets/masol-cartagena-biofuel.png"
