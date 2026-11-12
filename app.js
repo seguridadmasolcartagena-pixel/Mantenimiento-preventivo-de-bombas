@@ -159,6 +159,7 @@ const state = {
   pendingMaintenanceDelete: null,
   pendingImportData: null,
   frequencyBand: "all",
+  chartPeriod: "all",
   pendingHistoryReset: false,
   showFlowConfig: false,
   sharePointFlowUrl: loadSharePointFlowUrl(),
@@ -783,10 +784,11 @@ function renderDetail(pump) {
           </div>
           <div class="chart-actions">
             ${renderFrequencyFilter(pump)}
+            ${renderChartPeriodFilter()}
             <button class="button secondary button-small" type="button" id="registerMaintenance">Registrar mantenimiento</button>
           </div>
         </div>
-        ${renderChart(pump, state.frequencyBand)}
+        ${renderChart(pump, state.frequencyBand, state.chartPeriod)}
       </section>
 
       <section class="history-section">
@@ -794,7 +796,7 @@ function renderDetail(pump) {
           <h4>Evolucion de CF+</h4>
           <span>Indicador de condicion del rodamiento</span>
         </div>
-        ${renderCfPlusChart(pump, state.frequencyBand)}
+        ${renderCfPlusChart(pump, state.frequencyBand, state.chartPeriod)}
       </section>
 
       <section class="history-section">
@@ -874,27 +876,66 @@ function renderFrequencyFilter(pump) {
   `;
 }
 
+function renderChartPeriodFilter() {
+  const periods = [
+    ["all", "Todo el historial"],
+    ["week", "Última semana"],
+    ["month", "Último mes"],
+    ["3months", "Últimos 3 meses"],
+    ["6months", "Últimos 6 meses"],
+  ];
+  return `
+    <label class="frequency-filter">
+      <span>Periodo (ambas gráficas)</span>
+      <select class="field" id="chartPeriodFilter" aria-label="Periodo de las gráficas">
+        ${periods.map(([value, label]) => `<option value="${value}" ${state.chartPeriod === value ? "selected" : ""}>${label}</option>`).join("")}
+      </select>
+    </label>
+  `;
+}
+
+function chartPeriodStart(period) {
+  if (period === "all") return null;
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  if (period === "week") date.setDate(date.getDate() - 7);
+  else if (period === "month") date.setMonth(date.getMonth() - 1);
+  else if (period === "3months") date.setMonth(date.getMonth() - 3);
+  else if (period === "6months") date.setMonth(date.getMonth() - 6);
+  else return null;
+  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+}
+
+function chartDateWithinPeriod(value, startDate) {
+  if (!startDate) return true;
+  const date = String(value || "").slice(0, 10);
+  const today = new Date();
+  const endDate = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, "0"), String(today.getDate()).padStart(2, "0")].join("-");
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) && date >= startDate && date <= endDate;
+}
+
 function chartWidthForDates(dateCount, padding) {
   const horizontalSpacing = 48;
   return Math.max(680, padding * 2 + Math.max(1, dateCount - 1) * horizontalSpacing);
 }
 
-function renderChart(pump, selectedBand = "all") {
+function renderChart(pump, selectedBand = "all", selectedPeriod = "all") {
+  const periodStart = chartPeriodStart(selectedPeriod);
   const measurementPoints = measurementPointsForPump(pump);
   const allItems = [...pump.measurements]
     .map(normalizeMeasurement)
-    .filter((item) => measurementPoints.includes(item.point))
+    .filter((item) => measurementPoints.includes(item.point) && chartDateWithinPeriod(item.date, periodStart))
     .sort((a, b) => a.date.localeCompare(b.date));
   const items = allItems.filter((item) => selectedBand === "all" || frequencyBandKey(item.frequencyHz) === selectedBand);
   const maintenanceEvents = [...pump.maintenanceEvents]
     .map(normalizeMaintenanceEvent)
-    .filter((item) => item.date)
+    .filter((item) => item.date && chartDateWithinPeriod(item.date, periodStart))
     .sort((a, b) => a.date.localeCompare(b.date));
   if (!items.length && selectedBand !== "all") {
     return `<div class="empty-inline">No hay medidas en el rango de frecuencia seleccionado.</div>`;
   }
   if (!items.length && !maintenanceEvents.length) {
-    return `<div class="empty-inline">Todavia no hay medidas para graficar.</div>`;
+    return `<div class="empty-inline">${selectedPeriod === "all" ? "Todavia no hay medidas para graficar." : "No hay medidas de vibración en el periodo seleccionado."}</div>`;
   }
 
   const height = 270;
@@ -1005,19 +1046,21 @@ function renderChart(pump, selectedBand = "all") {
   `;
 }
 
-function renderCfPlusChart(pump, selectedBand = "all") {
+function renderCfPlusChart(pump, selectedBand = "all", selectedPeriod = "all") {
+  const periodStart = chartPeriodStart(selectedPeriod);
   const measurementPoints = measurementPointsForPump(pump);
   const items = pump.measurements
     .map(normalizeMeasurement)
     .filter(
       (item) =>
         measurementPoints.includes(item.point) &&
+        chartDateWithinPeriod(item.date, periodStart) &&
         item.cfPlus !== null &&
         (selectedBand === "all" || frequencyBandKey(item.frequencyHz) === selectedBand),
     )
     .sort((a, b) => a.date.localeCompare(b.date));
   if (!items.length) {
-    return `<div class="empty-inline">No hay valores CF+ disponibles${selectedBand === "all" ? "." : " en el rango de frecuencia seleccionado."}</div>`;
+    return `<div class="empty-inline">No hay valores CF+ disponibles${selectedPeriod !== "all" ? " en el periodo seleccionado." : selectedBand === "all" ? "." : " en el rango de frecuencia seleccionado."}</div>`;
   }
 
   const height = 250;
@@ -1498,6 +1541,10 @@ function bindEvents() {
   document.querySelector("#measureFile")?.addEventListener("change", importMeasurements);
   document.querySelector("#frequencyFilter")?.addEventListener("change", (event) => {
     state.frequencyBand = event.target.value;
+    render();
+  });
+  document.querySelector("#chartPeriodFilter")?.addEventListener("change", (event) => {
+    state.chartPeriod = event.target.value;
     render();
   });
   document.querySelector("#downloadHistory")?.addEventListener("click", downloadHistoryExcel);
