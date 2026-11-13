@@ -52,6 +52,12 @@
   window.MASOL_PWA = Object.freeze({ isStandalone, requestInstall });
 
   if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (sessionStorage.getItem("masol-sw-reloaded") === "1") return;
+      sessionStorage.setItem("masol-sw-reloaded", "1");
+      window.location.reload();
+    });
+
     const register = async () => {
       try {
         const registration = await navigator.serviceWorker.register("./service-worker.js", {
