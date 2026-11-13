@@ -605,7 +605,7 @@ function renderPumpRow(pump) {
           <span class="tag ${status}">${escapeHtml(pumpStatus)}</span>
           <span class="tag">${latest ? `${latest.vibration} ${latest.unit}` : "sin medidas"}</span>
           <span class="tag">${pump.incidents.length} incid.</span>
-          <span class="tag">${pump.maintenanceEvents.length} mant.</span>
+          
           <span class="tag">${escapeHtml(pump.pumpType)}</span>
           ${pump.powerKw === null ? "" : `<span class="tag">${pump.powerKw} kW</span>`}
           ${pump.hasVfd ? `<span class="tag">Variador</span>` : ""}
@@ -785,7 +785,7 @@ function renderDetail(pump) {
           <div class="chart-actions">
             ${renderFrequencyFilter(pump)}
             ${renderChartPeriodFilter()}
-            <button class="button secondary button-small" type="button" id="registerMaintenance">Registrar mantenimiento</button>
+            
           </div>
         </div>
         ${renderChart(pump, state.frequencyBand, state.chartPeriod)}
@@ -797,14 +797,6 @@ function renderDetail(pump) {
           <span>Indicador de condicion del rodamiento</span>
         </div>
         ${renderCfPlusChart(pump, state.frequencyBand, state.chartPeriod)}
-      </section>
-
-      <section class="history-section">
-        <div class="section-heading">
-          <h4>Mantenimientos</h4>
-          <span>${pump.maintenanceEvents.length} registrados</span>
-        </div>
-        ${renderMaintenanceEvents(pump)}
       </section>
 
       <section class="history-section">
