@@ -1,11 +1,11 @@
-const CACHE_NAME = "masol-bombas-pwa-v10-remove-maintenance";
+const CACHE_NAME = "masol-bombas-pwa-v11-no-maintenance";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./styles.css?v=20260901-intuitive-controls",
   "./auth.css?v=20260826-shared-login",
-  "./pwa.js?v=20261113-remove-maintenance-ui-v2",
-  "./auth.js?v=20261113-remove-maintenance-ui-v2",
+  "./pwa.js?v=20261113-no-maintenance-v3",
+  "./auth.js?v=20261113-no-maintenance-v3",
   "./manifest.webmanifest",
   "./app-icon.svg?v=20260901-corporate-pump",
   "./assets/masol-cartagena-biofuel.png"
@@ -27,7 +27,7 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET" || new URL(event.request.url).origin !== self.location.origin) return;
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { cache: "no-store" })
       .then((response) => {
         if (response.ok) {
           const copy = response.clone();
