@@ -225,6 +225,7 @@ function normalizeMeasurement(item) {
     dateTime: item.dateTime || item.date || "",
     point: normalizeMeasurementPoint(item.point),
     vibration: Number(item.vibration) || 0,
+    temperatureC: parseOptionalNumber(item.temperatureC ?? item.temperature ?? item.temperatura),
     cfPlus: parseOptionalNumber(item.cfPlus),
     frequencyHz: parseOptionalNumber(item.frequencyHz),
     unit: item.unit || "mm/s",
@@ -837,6 +838,14 @@ function renderDetail(pump) {
 
       <section class="history-section">
         <div class="section-heading">
+          <h4>Evolucion de temperatura</h4>
+          <span>Temperatura medida en cada punto de vibracion</span>
+        </div>
+        ${renderTemperatureChart(pump, state.chartPeriod)}
+      </section>
+
+      <section class="history-section">
+        <div class="section-heading">
           <h4>Historial de medidas</h4>
           <span>Importadas del Fluke</span>
         </div>
@@ -861,6 +870,7 @@ function renderPointSummary(point, item) {
       <span>${point}</span>
       <strong>${item ? `${item.vibration} ${escapeHtml(item.unit)}` : "-"}</strong>
       <small>${item ? `${formatDate(item.date)} · ${item.frequencyHz === null ? "sin Hz" : `${item.frequencyHz} Hz`}` : "sin medida"}</small>
+      <small>${item?.temperatureC === null || item?.temperatureC === undefined ? "Temperatura no indicada" : `Temperatura ${item.temperatureC} °C`}</small>
       <small>${item?.cfPlus === null || item?.cfPlus === undefined ? "CF+ no indicado" : `CF+ ${item.cfPlus}`}</small>
     </div>
   `;
@@ -914,7 +924,7 @@ function renderChartPeriodFilter() {
   ];
   return `
     <label class="frequency-filter">
-      <span>Periodo (ambas gráficas)</span>
+      <span>Periodo (3 gráficas)</span>
       <select class="field" id="chartPeriodFilter" aria-label="Periodo de las gráficas">
         ${periods.map(([value, label]) => `<option value="${value}" ${state.chartPeriod === value ? "selected" : ""}>${label}</option>`).join("")}
       </select>
@@ -1182,6 +1192,112 @@ function renderCfPlusChart(pump, selectedBand = "all", selectedPeriod = "all") {
   `;
 }
 
+
+function renderTemperatureChart(pump, selectedPeriod = "all") {
+  const periodStart = chartPeriodStart(selectedPeriod);
+  const measurementPoints = measurementPointsForPump(pump);
+  const items = pump.measurements
+    .map(normalizeMeasurement)
+    .filter(
+      (item) =>
+        measurementPoints.includes(item.point) &&
+        chartDateWithinPeriod(item.date, periodStart) &&
+        item.temperatureC !== null,
+    )
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  if (!items.length) {
+    return `<div class="empty-inline">No hay valores de temperatura disponibles${selectedPeriod !== "all" ? " en el periodo seleccionado." : "."}</div>`;
+  }
+
+  const height = 250;
+  const pad = 42;
+  const dates = [...new Set(items.map((item) => item.date))];
+  const width = chartWidthForDates(dates.length, pad);
+  const values = items.map((item) => Number(item.temperatureC)).filter(Number.isFinite);
+  let minTemperature = Math.min(...values);
+  let maxTemperature = Math.max(...values);
+
+  if (minTemperature === maxTemperature) {
+    minTemperature -= 5;
+    maxTemperature += 5;
+  } else {
+    const padding = Math.max(2, (maxTemperature - minTemperature) * 0.12);
+    minTemperature -= padding;
+    maxTemperature += padding;
+  }
+
+  const yTicks = Array.from({ length: 5 }, (_, index) => {
+    const ratio = index / 4;
+    const value = maxTemperature - (maxTemperature - minTemperature) * ratio;
+    return { value, y: pad + ratio * (height - pad * 2) };
+  });
+
+  const xForDate = (date) => {
+    const index = dates.indexOf(date);
+    return dates.length === 1 ? width / 2 : pad + (index * (width - pad * 2)) / (dates.length - 1);
+  };
+  const yForValue = (value) =>
+    height - pad - ((value - minTemperature) / (maxTemperature - minTemperature)) * (height - pad * 2);
+
+  const series = measurementPoints.map((point) => {
+    const chartPoints = items
+      .filter((item) => item.point === point)
+      .map((item) => ({ ...item, x: xForDate(item.date), y: yForValue(item.temperatureC) }));
+    const path = chartPoints.map((item, index) => `${index ? "L" : "M"} ${item.x.toFixed(1)} ${item.y.toFixed(1)}`).join(" ");
+    return { point, chartPoints, path };
+  });
+
+  return `
+    <div class="chart-scroll" tabindex="0" aria-label="Desplazar grafica de temperatura horizontalmente">
+      <svg class="chart temperature-chart" style="--chart-width: ${width}px" viewBox="0 0 ${width} ${height}" role="img" aria-label="Evolucion de temperatura por punto">
+        ${yTicks
+          .map(
+            (tick) => `
+              <g class="axis-tick">
+                <line x1="${pad}" y1="${tick.y.toFixed(1)}" x2="${width - pad}" y2="${tick.y.toFixed(1)}" style="stroke: #e1e6df; stroke-width: 1" />
+                <text x="${pad - 7}" y="${(tick.y + 4).toFixed(1)}" text-anchor="end">${tick.value.toFixed(1)}</text>
+              </g>
+            `,
+          )
+          .join("")}
+        <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" />
+        <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}" />
+        ${series
+          .map(
+            (line) => `
+              <path d="${line.path}" style="stroke: ${POINT_COLORS[line.point]}" />
+              ${line.chartPoints
+                .map(
+                  (point) => `
+                    <g>
+                      <title>${escapeHtml(`${formatDate(point.date)} · ${point.point} · ${point.temperatureC} °C`)}</title>
+                      <circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="4.5" style="stroke: ${POINT_COLORS[line.point]}" />
+                    </g>
+                  `,
+                )
+                .join("")}
+            `,
+          )
+          .join("")}
+        ${measurementPoints
+          .map(
+            (point, index) => `
+              <g class="chart-legend">
+                <rect x="${pad + index * ((width - pad * 2) / measurementPoints.length)}" y="12" width="10" height="10" rx="2" style="fill: ${POINT_COLORS[point]}" />
+                <text x="${pad + 16 + index * ((width - pad * 2) / measurementPoints.length)}" y="22">${point}</text>
+              </g>
+            `,
+          )
+          .join("")}
+        <text x="${pad + 4}" y="${pad - 9}">°C</text>
+        <text x="${pad}" y="${height - 9}">${escapeHtml(dates[0])}</text>
+        <text x="${width - pad}" y="${height - 9}" text-anchor="end">${escapeHtml(dates.at(-1))}</text>
+      </svg>
+    </div>
+  `;
+}
+
 function renderMaintenanceEvents(pump) {
   const rows = [...pump.maintenanceEvents].map(normalizeMaintenanceEvent).sort((a, b) => b.date.localeCompare(a.date));
   if (!rows.length) return `<div class="empty-inline">No hay mantenimientos registrados.</div>`;
@@ -1227,6 +1343,7 @@ function renderMeasurementsTable(measurements) {
             <th>Punto</th>
             <th>Frecuencia</th>
             <th>Vibracion</th>
+            <th>Temperatura</th>
             <th>CF+</th>
             <th>Origen</th>
           </tr>
@@ -1240,6 +1357,7 @@ function renderMeasurementsTable(measurements) {
                   <td>${escapeHtml(item.point)}</td>
                   <td>${item.frequencyHz === null ? "No indicada" : `${item.frequencyHz} Hz`}</td>
                   <td><strong>${item.vibration} ${escapeHtml(item.unit)}</strong></td>
+                  <td>${item.temperatureC === null ? "No indicada" : `${item.temperatureC} °C`}</td>
                   <td>${item.cfPlus === null ? "No indicado" : item.cfPlus}</td>
                   <td>${escapeHtml(item.source)}</td>
                 </tr>
@@ -1957,6 +2075,7 @@ function parseViewDataSheet(rows) {
 
     const dateColumn = findDateColumn(rows, headerRows.groupRowIndex, headerRows.valueRowIndex);
     const velocityRmsColumn = findVelocityRmsColumn(rows, headerRows.groupRowIndex, headerRows.valueRowIndex);
+    const temperatureColumn = findTemperatureColumn(rows, headerRows.groupRowIndex, headerRows.valueRowIndex);
     const cfPlusColumn = findCfPlusColumn(rows, headerRows.groupRowIndex, headerRows.valueRowIndex);
     if (dateColumn === -1 || velocityRmsColumn === -1) return;
 
@@ -1964,6 +2083,7 @@ function parseViewDataSheet(rows) {
       machineName,
       dateColumn,
       valueColumn: velocityRmsColumn,
+      temperatureColumn,
       cfPlusColumn,
       headerRows: [
         normalizeRowLength(rows[rowIndex]),
@@ -1981,6 +2101,7 @@ function parseViewDataSheet(rows) {
       const date = normalizeDate(dataRow[dateColumn]);
       const dateTime = normalizeDateTime(dataRow[dateColumn]);
       const vibration = parseNumber(dataRow[velocityRmsColumn]);
+      const temperatureC = temperatureColumn === -1 ? null : parseOptionalNumber(dataRow[temperatureColumn]);
       const cfPlus = cfPlusColumn === -1 ? null : parseOptionalNumber(dataRow[cfPlusColumn]);
       if (!date || !vibration) continue;
 
@@ -1990,6 +2111,8 @@ function parseViewDataSheet(rows) {
         fecha: date,
         fechaHora: dateTime,
         vibracion: vibration,
+        temperatura: temperatureC,
+        temperatureC,
         cfPlus,
         unidad: "mm/s",
         nombre: code,
@@ -2076,6 +2199,28 @@ function findVelocityRmsColumn(rows, groupRowIndex, valueRowIndex) {
   }
 
   return headerRow.findIndex((cell) => isVelocityRmsHeader(cell));
+}
+
+function findTemperatureColumn(rows, groupRowIndex, valueRowIndex) {
+  const groupRow = rows[groupRowIndex] ?? [];
+  const headerRow = rows[valueRowIndex] ?? [];
+
+  const centigradeColumn = headerRow.findIndex((cell) => {
+    const key = cleanKey(cell);
+    return key.includes("centigrade") || key.includes("celsius");
+  });
+  if (centigradeColumn !== -1) return centigradeColumn;
+
+  const temperatureGroupColumn = groupRow.findIndex((cell) => cleanKey(cell).includes("temperature"));
+  if (temperatureGroupColumn !== -1) {
+    for (let column = temperatureGroupColumn; column < Math.min(headerRow.length, temperatureGroupColumn + 3); column += 1) {
+      const key = cleanKey(headerRow[column]);
+      if (key.includes("centigrade") || key.includes("celsius")) return column;
+    }
+    return temperatureGroupColumn;
+  }
+
+  return -1;
 }
 
 function findCfPlusColumn(rows, groupRowIndex, valueRowIndex) {
@@ -2167,6 +2312,7 @@ function mergeMeasurements(rows, conditionMap = new Map()) {
       dateTime: normalized.dateTime,
       point: normalized.point,
       vibration: normalized.vibration,
+      temperatureC: normalized.temperatureC,
       cfPlus: normalized.cfPlus,
       frequencyHz: normalized.frequencyHz,
       unit: normalized.unit || "mm/s",
@@ -2212,6 +2358,9 @@ function mergeMeasurementIntoPump(pump, measurement) {
     return true;
   }
 
+  if (existingMeasurement.temperatureC === null || existingMeasurement.temperatureC === undefined) {
+    existingMeasurement.temperatureC = measurement.temperatureC;
+  }
   if (existingMeasurement.cfPlus === null || existingMeasurement.cfPlus === undefined) {
     existingMeasurement.cfPlus = measurement.cfPlus;
   }
@@ -2562,6 +2711,8 @@ function buildViewDataExportRows() {
         outputRow[0] = index + 1;
         outputRow[1] = formatDateTimeForExcel(item.dateTime || item.date);
         outputRow[12] = Number(item.vibration);
+        if (item.temperatureC !== null && item.temperatureC !== undefined) outputRow[27] = Number(item.temperatureC);
+        if (item.cfPlus !== null && item.cfPlus !== undefined) outputRow[29] = Number(item.cfPlus);
         rows.push(outputRow);
       });
 
@@ -2667,6 +2818,7 @@ function normalizeRow(row) {
     dateTime: normalizeDateTime(get("fechaHora", "fecha hora", "datetime", "measurement date", "fecha medida", "date", "fecha")),
     point: normalizeMeasurementPoint(get("punto", "punto medida", "measurement point", "point")),
     vibration: parseNumber(get("vibracion", "vibration", "overall vibration", "valor", "rms")),
+    temperatureC: parseOptionalNumber(get("temperatura", "temperature", "temperature c", "temperature °c", "centigrade", "celsius")),
     cfPlus: parseOptionalNumber(get("cfPlus", "cf plus", "crest factor plus")),
     frequencyHz: parseOptionalNumber(get("frequencyHz", "frecuencia", "frecuencia hz", "hz")),
     unit: String(get("unidad", "unit")).trim() || "mm/s",
