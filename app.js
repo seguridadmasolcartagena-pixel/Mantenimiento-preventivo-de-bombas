@@ -584,7 +584,7 @@ function render() {
         </section>
         ${state.importMessage ? `<div class="import-message">${escapeHtml(state.importMessage)}</div>` : ""}
 
-        <section class="workspace">
+        <section class="workspace workspace-30-70" style="display:grid;grid-template-columns:minmax(240px,3fr) minmax(0,7fr);gap:12px;align-items:start;">
           <div class="panel">
             <div class="panel-header">
               <h3>Bombas</h3>
