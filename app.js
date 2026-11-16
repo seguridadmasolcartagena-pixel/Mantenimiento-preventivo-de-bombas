@@ -833,37 +833,35 @@ function renderDetail(pump) {
         </div>
       </div>
 
-      <div class="charts-row">
-        <section class="chart-card">
-          <div class="section-heading">
-            <div>
-              <h4>Vibración</h4>
-              <span>${measurementPoints.join(" · ")}</span>
-            </div>
+      <section class="chart-card chart-card-vertical" style="display:block;width:100%;margin-top:12px;">
+        <div class="section-heading">
+          <div>
+            <h4>Vibración</h4>
+            <span>${measurementPoints.join(" · ")}</span>
           </div>
-          ${renderChart(pump, state.frequencyBand, state.chartPeriod)}
-        </section>
+        </div>
+        ${renderChart(pump, state.frequencyBand, state.chartPeriod)}
+      </section>
 
-        <section class="chart-card">
-          <div class="section-heading">
-            <div>
-              <h4>CF+</h4>
-              <span>Condición del rodamiento</span>
-            </div>
+      <section class="chart-card chart-card-vertical" style="display:block;width:100%;margin-top:18px;">
+        <div class="section-heading">
+          <div>
+            <h4>CF+</h4>
+            <span>Condición del rodamiento</span>
           </div>
-          ${renderCfPlusChart(pump, state.frequencyBand, state.chartPeriod)}
-        </section>
+        </div>
+        ${renderCfPlusChart(pump, state.frequencyBand, state.chartPeriod)}
+      </section>
 
-        <section class="chart-card temperature-card">
-          <div class="section-heading">
-            <div>
-              <h4>Temperatura</h4>
-              <span>Temperatura por punto</span>
-            </div>
+      <section class="chart-card chart-card-vertical temperature-card" style="display:block;width:100%;margin-top:18px;">
+        <div class="section-heading">
+          <div>
+            <h4>Temperatura</h4>
+            <span>Temperatura por punto</span>
           </div>
-          ${renderTemperatureChart(pump, state.chartPeriod)}
-        </section>
-      </div>
+        </div>
+        ${renderTemperatureChart(pump, state.chartPeriod)}
+      </section>
 
       <section class="history-section">
         <div class="section-heading">
