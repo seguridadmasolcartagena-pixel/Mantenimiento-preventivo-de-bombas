@@ -196,6 +196,12 @@ function loadPumps() {
   return pumps;
 }
 
+function supportsSharedMotorGroup(pumpOrCode) {
+  const rawCode = typeof pumpOrCode === "string" ? pumpOrCode : pumpOrCode?.code;
+  const key = String(rawCode ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return key === "1600P2A" || key === "1600P2B";
+}
+
 function normalizePump(pump, { migrateLegacyCfPlusAlarm = false } = {}) {
   return {
     id: pump.id ?? crypto.randomUUID(),
@@ -208,7 +214,7 @@ function normalizePump(pump, { migrateLegacyCfPlusAlarm = false } = {}) {
     alarma: String(pump.alarma ?? "").trim() || "6",
     cfPlusAviso: String(pump.cfPlusAviso ?? "").trim() || String(CFPLUS_THRESHOLDS.aviso),
     cfPlusAlarma: normalizeCfPlusAlarm(pump.cfPlusAlarma, { migrateLegacy: migrateLegacyCfPlusAlarm }),
-    motorGroup: String(pump.motorGroup ?? "").trim(),
+    motorGroup: supportsSharedMotorGroup(pump) ? String(pump.motorGroup ?? "").trim() : "",
     hasVfd: Boolean(pump.hasVfd),
     lastFrequencyHz: parseOptionalNumber(pump.lastFrequencyHz),
     status: normalizeStatus(pump.status),
@@ -711,6 +717,7 @@ function renderDetail(pump) {
   const latest = latestMeasurement(pump);
   const latestByPoint = latestMeasurementsByPoint(pump);
   const measurementPoints = measurementPointsForPump(pump);
+  const sharedMotorGroup = supportsSharedMotorGroup(pump);
   const average = pump.measurements.length
     ? pump.measurements.reduce((sum, item) => sum + Number(item.vibration), 0) / pump.measurements.length
     : 0;
@@ -738,7 +745,7 @@ function renderDetail(pump) {
         </div>
       </section>
 
-      <form id="pumpForm" class="form-grid compact-form">
+      <form id="pumpForm" class="pump-compact-form">
         <label>
           Codigo
           <input class="field" name="code" value="${escapeHtml(pump.code)}" required />
@@ -747,7 +754,7 @@ function renderDetail(pump) {
           Area
           <input class="field" name="area" value="${escapeHtml(pump.area)}" required />
         </label>
-        <label class="full">
+        <label class="pump-field-name">
           Nombre / descripción
           <input class="field" name="name" value="${escapeHtml(pump.name)}" required />
         </label>
@@ -780,17 +787,19 @@ function renderDetail(pump) {
           Alarma CF+
           <input class="field" name="cfPlusAlarma" type="number" step="0.01" min="0" inputmode="decimal" value="${escapeHtml(pump.cfPlusAlarma ?? "")}" />
         </label>
-        <label class="full">
-          Grupo de motor compartido
-          <input class="field" name="motorGroup" list="motorGroupOptions" value="${escapeHtml(pump.motorGroup ?? "")}" />
-          <small>Usa exactamente el mismo grupo en todas las bombas que compartan este motor.</small>
-          <datalist id="motorGroupOptions">
-            ${[...new Set(state.pumps.map((item) => item.motorGroup).filter(Boolean))]
-              .sort((a, b) => a.localeCompare(b, "es", { numeric: true, sensitivity: "base" }))
-              .map((group) => `<option value="${escapeHtml(group)}"></option>`)
-              .join("")}
-          </datalist>
-        </label>
+        ${sharedMotorGroup ? `
+          <label class="pump-field-motor">
+            Grupo de motor compartido
+            <input class="field" name="motorGroup" list="motorGroupOptions" value="${escapeHtml(pump.motorGroup ?? "")}" />
+            <small>Solo se utiliza para compartir las medidas de motor entre 1600P2A y 1600P2B.</small>
+            <datalist id="motorGroupOptions">
+              ${[...new Set(state.pumps.filter(supportsSharedMotorGroup).map((item) => item.motorGroup).filter(Boolean))]
+                .sort((a, b) => a.localeCompare(b, "es", { numeric: true, sensitivity: "base" }))
+                .map((group) => `<option value="${escapeHtml(group)}"></option>`)
+                .join("")}
+            </datalist>
+          </label>
+        ` : ""}
         <label>
           Estado operativo
           <select class="field" name="status">
@@ -813,36 +822,48 @@ function renderDetail(pump) {
         </div>
       </form>
 
-      <section class="history-section">
-        <div class="section-heading">
-          <div>
-            <h4>Grafica de vibracion</h4>
-            <span>${measurementPoints.join(" · ")}</span>
-          </div>
-          <div class="chart-actions">
-            ${renderFrequencyFilter(pump)}
-            ${renderChartPeriodFilter()}
-            
-          </div>
+      <div class="charts-toolbar">
+        <div>
+          <strong>Gráficas de condición</strong>
+          <span>Vibración · CF+ · Temperatura</span>
         </div>
-        ${renderChart(pump, state.frequencyBand, state.chartPeriod)}
-      </section>
+        <div class="chart-actions">
+          ${renderFrequencyFilter(pump)}
+          ${renderChartPeriodFilter()}
+        </div>
+      </div>
 
-      <section class="history-section">
-        <div class="section-heading">
-          <h4>Evolucion de CF+</h4>
-          <span>Indicador de condicion del rodamiento</span>
-        </div>
-        ${renderCfPlusChart(pump, state.frequencyBand, state.chartPeriod)}
-      </section>
+      <div class="charts-row">
+        <section class="chart-card">
+          <div class="section-heading">
+            <div>
+              <h4>Vibración</h4>
+              <span>${measurementPoints.join(" · ")}</span>
+            </div>
+          </div>
+          ${renderChart(pump, state.frequencyBand, state.chartPeriod)}
+        </section>
 
-      <section class="history-section">
-        <div class="section-heading">
-          <h4>Evolucion de temperatura</h4>
-          <span>Temperatura medida en cada punto de vibracion</span>
-        </div>
-        ${renderTemperatureChart(pump, state.chartPeriod)}
-      </section>
+        <section class="chart-card">
+          <div class="section-heading">
+            <div>
+              <h4>CF+</h4>
+              <span>Condición del rodamiento</span>
+            </div>
+          </div>
+          ${renderCfPlusChart(pump, state.frequencyBand, state.chartPeriod)}
+        </section>
+
+        <section class="chart-card temperature-card">
+          <div class="section-heading">
+            <div>
+              <h4>Temperatura</h4>
+              <span>Temperatura por punto</span>
+            </div>
+          </div>
+          ${renderTemperatureChart(pump, state.chartPeriod)}
+        </section>
+      </div>
 
       <section class="history-section">
         <div class="section-heading">
@@ -954,7 +975,7 @@ function chartDateWithinPeriod(value, startDate) {
 
 function chartWidthForDates(dateCount, padding) {
   const horizontalSpacing = 48;
-  return Math.max(680, padding * 2 + Math.max(1, dateCount - 1) * horizontalSpacing);
+  return Math.max(360, padding * 2 + Math.max(1, dateCount - 1) * horizontalSpacing);
 }
 
 function renderChart(pump, selectedBand = "all", selectedPeriod = "all") {
@@ -1782,7 +1803,9 @@ function saveSelectedPump(event) {
     alarma: String(form.get("alarma") ?? "").trim(),
     cfPlusAviso: String(form.get("cfPlusAviso") ?? "").trim(),
     cfPlusAlarma: String(form.get("cfPlusAlarma") ?? "").trim(),
-    motorGroup: String(form.get("motorGroup") ?? "").trim(),
+    motorGroup: supportsSharedMotorGroup(String(form.get("code") ?? "").trim())
+      ? String(form.get("motorGroup") ?? "").trim()
+      : "",
     hasVfd: form.get("hasVfd") === "on",
     status: String(form.get("status") ?? "Operativa"),
   };
@@ -2127,7 +2150,7 @@ function parseViewDataSheet(rows) {
   return { measurements, blocks };
 }
 
-function normalizeRowLength(row, length = 29) {
+function normalizeRowLength(row, length = 30) {
   const normalized = Array.from({ length }, (_, index) => row?.[index] ?? "");
   while (normalized.length && normalized.at(-1) === "") normalized.pop();
   return normalized;
@@ -2324,11 +2347,16 @@ function mergeMeasurements(rows, conditionMap = new Map()) {
       importedMeasurements += 1;
     }
 
-    if (!MOTOR_MEASUREMENT_POINTS.has(measurement.point) || !pump.motorGroup) continue;
+    if (!MOTOR_MEASUREMENT_POINTS.has(measurement.point) || !supportsSharedMotorGroup(pump) || !pump.motorGroup) continue;
 
     const motorGroupKey = pump.motorGroup.trim().toLowerCase();
     state.pumps
-      .filter((item) => item.id !== pump.id && item.motorGroup.trim().toLowerCase() === motorGroupKey)
+      .filter(
+        (item) =>
+          item.id !== pump.id &&
+          supportsSharedMotorGroup(item) &&
+          item.motorGroup.trim().toLowerCase() === motorGroupKey,
+      )
       .forEach((linkedPump) => {
         const sharedMeasurement = { ...measurement, id: crypto.randomUUID() };
         if (!mergeMeasurementIntoPump(linkedPump, sharedMeasurement)) return;
@@ -2380,6 +2408,8 @@ function mergeViewDataBlocks(blocks) {
         machineName: block.machineName,
         dateColumn: block.dateColumn,
         valueColumn: block.valueColumn,
+        temperatureColumn: block.temperatureColumn,
+        cfPlusColumn: block.cfPlusColumn,
         headerRows: block.headerRows,
         dataRows: [],
       };
@@ -3030,8 +3060,59 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function backfillTemperaturesFromViewData() {
+  let updated = 0;
+
+  for (const block of state.viewDataBlocks) {
+    const pumpRef = splitMachineName(block.machineName || "");
+    const pump = state.pumps.find((item) => item.code.toLowerCase() === pumpRef.code.toLowerCase());
+    if (!pump) continue;
+
+    const headerRows = Array.isArray(block.headerRows) ? block.headerRows : [];
+    const dateColumn = Number.isInteger(block.dateColumn)
+      ? block.dateColumn
+      : findDateColumn(headerRows, 1, 2);
+    const valueColumn = Number.isInteger(block.valueColumn)
+      ? block.valueColumn
+      : findVelocityRmsColumn(headerRows, 1, 2);
+    const temperatureColumn = Number.isInteger(block.temperatureColumn)
+      ? block.temperatureColumn
+      : findTemperatureColumn(headerRows, 1, 2);
+
+    if (dateColumn < 0 || valueColumn < 0 || temperatureColumn < 0) continue;
+
+    for (const row of block.dataRows || []) {
+      const temperatureC = parseOptionalNumber(row[temperatureColumn]);
+      if (temperatureC === null) continue;
+
+      const date = normalizeDate(row[dateColumn]);
+      const dateTime = normalizeDateTime(row[dateColumn]);
+      const vibration = parseNumber(row[valueColumn]);
+
+      const measurement = pump.measurements.find(
+        (item) =>
+          normalizeMeasurementPoint(item.point) === pumpRef.point &&
+          item.date === date &&
+          Number(item.vibration) === Number(vibration) &&
+          (!dateTime || !item.dateTime || item.dateTime === dateTime),
+      );
+
+      if (!measurement || parseOptionalNumber(measurement.temperatureC) !== null) continue;
+      measurement.temperatureC = temperatureC;
+      updated += 1;
+    }
+  }
+
+  return updated;
+}
+
 async function initApp() {
   await loadSharedDataFromSharePoint();
+  const temperaturesBackfilled = backfillTemperaturesFromViewData();
+  if (temperaturesBackfilled) {
+    savePumps({ markUpdated: false });
+    void syncSharedData();
+  }
   render();
   mountPredictiveChat({
     getContext: () => buildPredictiveContext(state.pumps, state.selectedId, state.viewDataBlocks),
