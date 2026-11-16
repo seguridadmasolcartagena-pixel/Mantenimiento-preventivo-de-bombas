@@ -974,8 +974,8 @@ function chartDateWithinPeriod(value, startDate) {
 }
 
 function chartWidthForDates(dateCount, padding) {
-  const horizontalSpacing = 48;
-  return Math.max(360, padding * 2 + Math.max(1, dateCount - 1) * horizontalSpacing);
+  const horizontalSpacing = 56;
+  return Math.max(900, padding * 2 + Math.max(1, dateCount - 1) * horizontalSpacing);
 }
 
 function renderChart(pump, selectedBand = "all", selectedPeriod = "all") {
@@ -997,8 +997,8 @@ function renderChart(pump, selectedBand = "all", selectedPeriod = "all") {
     return `<div class="empty-inline">${selectedPeriod === "all" ? "Todavia no hay medidas para graficar." : "No hay medidas de vibración en el periodo seleccionado."}</div>`;
   }
 
-  const height = 270;
-  const pad = 58;
+  const height = 340;
+  const pad = 64;
   const dates = [...new Set([...items.map((item) => item.date), ...maintenanceEvents.map((item) => item.date)])].sort();
   const width = chartWidthForDates(dates.length, pad);
   const visibleItems = items.filter((item) => dates.includes(item.date));
@@ -1122,8 +1122,8 @@ function renderCfPlusChart(pump, selectedBand = "all", selectedPeriod = "all") {
     return `<div class="empty-inline">No hay valores CF+ disponibles${selectedPeriod !== "all" ? " en el periodo seleccionado." : selectedBand === "all" ? "." : " en el rango de frecuencia seleccionado."}</div>`;
   }
 
-  const height = 250;
-  const pad = 38;
+  const height = 320;
+  const pad = 46;
   const dates = [...new Set(items.map((item) => item.date))];
   const width = chartWidthForDates(dates.length, pad);
   const visibleItems = items.filter((item) => dates.includes(item.date));
@@ -1231,8 +1231,8 @@ function renderTemperatureChart(pump, selectedPeriod = "all") {
     return `<div class="empty-inline">No hay valores de temperatura disponibles${selectedPeriod !== "all" ? " en el periodo seleccionado." : "."}</div>`;
   }
 
-  const height = 250;
-  const pad = 42;
+  const height = 320;
+  const pad = 48;
   const dates = [...new Set(items.map((item) => item.date))];
   const width = chartWidthForDates(dates.length, pad);
   const values = items.map((item) => Number(item.temperatureC)).filter(Number.isFinite);
