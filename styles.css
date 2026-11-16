@@ -2017,3 +2017,10 @@ td strong {
   }
 
 }
+
+
+@media (max-width: 760px) {
+  .workspace-30-70 {
+    grid-template-columns: 1fr !important;
+  }
+}
