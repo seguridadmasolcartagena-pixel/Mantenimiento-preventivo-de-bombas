@@ -360,6 +360,38 @@ function latestMeasurement(pump) {
   return [...pump.measurements].sort(compareMeasurements).at(-1) ?? null;
 }
 
+const STALE_VIBRATION_DAYS = 15;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function measurementDayTimestamp(item) {
+  const rawValue = String(item?.dateTime || item?.date || "").trim();
+  if (!rawValue) return null;
+
+  const isoDate = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoDate) {
+    return Date.UTC(Number(isoDate[1]), Number(isoDate[2]) - 1, Number(isoDate[3]));
+  }
+
+  const parsed = new Date(rawValue);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+}
+
+function daysSinceLatestVibration(pump) {
+  const latest = latestMeasurement(pump);
+  const latestDay = measurementDayTimestamp(latest);
+  if (latestDay === null) return null;
+
+  const now = new Date();
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.max(0, Math.floor((today - latestDay) / DAY_MS));
+}
+
+function hasStaleVibrationReading(pump) {
+  const days = daysSinceLatestVibration(pump);
+  return days !== null && days > STALE_VIBRATION_DAYS;
+}
+
 function latestMeasurementsByPoint(pump) {
   const measurementPoints = measurementPointsForPump(pump);
   const latest = Object.fromEntries(measurementPoints.map((point) => [point, null]));
@@ -420,7 +452,9 @@ function triggeredMeasurements(pump) {
 
 function calculatedPumpStatus(pump) {
   const baseStatus = normalizeStatus(pump.status);
-  if (baseStatus === "Parada" || baseStatus === "Mantenimiento") return baseStatus;
+  if (baseStatus === "Parada") return "Parada";
+  if (hasStaleVibrationReading(pump)) return "Parada";
+  if (baseStatus === "Mantenimiento") return "Mantenimiento";
 
   const triggered = triggeredMeasurements(pump);
   if (triggered.some((item) => item.thresholdType === "Alarma")) return "Alarma";
@@ -592,6 +626,7 @@ function renderPumpRow(pump) {
   const latest = latestMeasurement(pump);
   const pumpStatus = calculatedPumpStatus(pump);
   const status = statusClass(pumpStatus);
+  const staleDays = daysSinceLatestVibration(pump);
 
   return `
     <button class="pump-row ${pump.id === state.selectedId ? "active" : ""}" data-select="${pump.id}">
@@ -603,6 +638,7 @@ function renderPumpRow(pump) {
         <div class="pump-meta">
           <span class="tag">${escapeHtml(pump.area)}</span>
           <span class="tag ${status}">${escapeHtml(pumpStatus)}</span>
+          ${staleDays !== null && staleDays > STALE_VIBRATION_DAYS ? `<span class="tag stop">${staleDays} días sin lectura</span>` : ""}
           <span class="tag">${latest ? `${latest.vibration} ${latest.unit}` : "sin medidas"}</span>
           <span class="tag">${pump.incidents.length} incid.</span>
           
