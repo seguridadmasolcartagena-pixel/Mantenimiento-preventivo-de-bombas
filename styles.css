@@ -573,8 +573,8 @@ button {
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(320px, 0.8fr) minmax(540px, 1.2fr);
-  gap: 22px;
+  grid-template-columns: minmax(250px, 0.52fr) minmax(0, 1.48fr);
+  gap: 14px;
   align-items: start;
 }
 
@@ -602,9 +602,9 @@ button {
 
 .search-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 160px;
-  gap: 10px;
-  padding: 16px 18px;
+  grid-template-columns: minmax(0, 1fr) 115px;
+  gap: 8px;
+  padding: 13px 12px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -644,8 +644,8 @@ button {
 .pump-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  padding: 16px 18px;
+  gap: 8px;
+  padding: 13px 12px;
   background: transparent;
   border-bottom: 1px solid var(--line);
   cursor: pointer;
@@ -658,13 +658,13 @@ button {
 .pump-row:hover,
 .pump-row.active {
   background: rgba(238, 242, 234, 0.82);
-  padding-left: 22px;
+  padding-left: 15px;
 }
 
 .pump-title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 7px;
   min-width: 0;
 }
 
@@ -683,15 +683,15 @@ button {
 .pump-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
+  gap: 5px;
+  margin-top: 6px;
 }
 
 .tag {
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
-  padding: 3px 8px;
+  min-height: 22px;
+  padding: 2px 6px;
   border-radius: 999px;
   background: var(--surface-soft);
   color: var(--muted);
