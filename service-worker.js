@@ -1,11 +1,11 @@
-const CACHE_NAME = "masol-bombas-pwa-v15-large-vertical-charts";
+const CACHE_NAME = "masol-bombas-pwa-v16-hard-vertical-charts";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./styles.css?v=20261116-large-vertical-charts-v1",
+  "./styles.css?v=20261116-hard-vertical-charts-v2",
   "./auth.css?v=20260826-shared-login",
   "./pwa.js?v=20261113-no-maintenance-v3",
-  "./auth.js?v=20261116-large-vertical-charts-v1",
+  "./auth.js?v=20261116-hard-vertical-charts-v2",
   "./manifest.webmanifest",
   "./app-icon.svg?v=20260901-corporate-pump",
   "./assets/masol-cartagena-biofuel.png"
